@@ -15,11 +15,21 @@ Just your conversation, your model, and a little companion keeping you company.
 ## 📸 Screenshots
 
 <div align="center">
-  <img src="(for_readme)/Cloudstale1.jpg" width="48%" />
-  <img src="(for_readme)/Cloudstale2.jpg" width="48%" />
-  <br>
-  <img src="(for_readme)/Cloudstale3.jpg" width="48%" />
-  <img src="(for_readme)/Cloudstale4.jpg" width="48%" />
+
+<img src="(for_readme)/Cloudstale1" width="100%" />
+
+<br>
+
+<img src="(for_readme)/Cloudstale2" width="100%" />
+
+<br>
+
+<img src="(for_readme)/Cloudstale3" width="100%" />
+
+<br>
+
+<img src="(for_readme)/Cloudstale4" width="100%" />
+
 </div>
 
 ---
