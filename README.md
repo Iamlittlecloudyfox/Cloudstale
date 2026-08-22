@@ -107,7 +107,7 @@ I'm still learning TypeScript, so AI agents helped me a lot during development. 
 Things I'd like to explore:
 
 * [ ] Better Ollama support
-* [ ] Fix Mascot in Dark Theme
+* [ ] Fix Mascot in Dark Mode
 * [ ] More OpenAI-compatible APIs
 * [ ] Conversation management
 * [ ] Custom / Browsable Endpoints
