@@ -34,8 +34,6 @@ Just your conversation, your model, and a little companion keeping you company.
 
 ---
 
----
-
 ## 🦊 The little one
 
 Cloudstale comes with its own companion.
