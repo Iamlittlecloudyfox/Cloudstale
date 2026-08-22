@@ -12,6 +12,18 @@ No twenty-seven buttons.
 No dashboard pretending you're launching a satellite.
 Just your conversation, your model, and a little companion keeping you company.
 
+## 📸 Screenshots
+
+<div align="center">
+  <img src="(for_readme)/cloudstale1.jpg" width="48%" />
+  <img src="(for_readme)/cloudstale2.jpg" width="48%" />
+  <br>
+  <img src="(for_readme)/cloudstale3.jpg" width="48%" />
+  <img src="(for_readme)/cloudstale4.jpg" width="48%" />
+</div>
+
+---
+
 ---
 
 ## 🦊 The little one
@@ -115,12 +127,6 @@ Cloudstale is currently built with:
 I'm also learning TypeScript properly while working on this.
 
 So yeah, some of this code was written before I fully understood TypeScript (I'm still learning TypeScript).
-
----
-
-## 📸 Screenshots
-
-
 
 ---
 
