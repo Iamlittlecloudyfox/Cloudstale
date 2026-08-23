@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { Plus, Settings, Send, Trash2, X, Moon, Sun, MessageSquare, Pencil, RotateCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
@@ -7,7 +7,45 @@ import { listen } from "@tauri-apps/api/event";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
+// ─── API style detection & URL normalization ──────────────────────────────
+function detectApiStyle(url) {
+  try {
+    const u = new URL(url.trim());
+    if (u.hostname.includes("anthropic.com") || u.pathname.endsWith("/messages")) {
+      return "anthropic";
+    }
+  } catch {}
+  return "openai";
+}
+
+function normalizeChatUrl(rawUrl, style) {
+  const trimmed = rawUrl.trim().replace(/\/+$/, "");
+  if (style === "anthropic") {
+    return /\/v1\/messages$/.test(trimmed) ? trimmed : `${trimmed}/v1/messages`;
+  }
+  if (/\/(chat\/completions|responses)$/.test(trimmed)) return trimmed;
+  return `${trimmed}/chat/completions`;
+}
+
 const MIN_THINKING_DISPLAY_MS = 550;
+
+const MASCOT_IMAGES_LIGHT = [
+  "/mascot/idle.png",
+  "/mascot/idle_blink.png",
+  "/mascot/think.png",
+  "/mascot/answer.png",
+  "/mascot/answer2.png",
+];
+
+const MASCOT_IMAGES_DARK = [
+  "/mascot/dark/idle_dark.png",
+  "/mascot/dark/idle_blink_dark.png",
+  "/mascot/dark/think_dark.png",
+  "/mascot/dark/answer_dark.png",
+  "/mascot/dark/answer2_dark.png",
+];
+
+const ALL_MASCOT_IMAGES = [...MASCOT_IMAGES_LIGHT, ...MASCOT_IMAGES_DARK];
 
 const FONTS = {
   inter: { label: "Inter", value: "'Inter', system-ui, -apple-system, sans-serif" },
@@ -42,19 +80,24 @@ const PERSONAS = {
   },
 };
 
+const MASCOT_PERSONA_PROMPT = "You are Cloudy, a friendly and curious anthro fox who lives in this chat as its mascot. Let a bit of that personality come through in how you write — warm, a little playful and whimsical, quick with a gentle touch of humor — without ever getting in the way of giving a complete, accurate, and genuinely useful answer. Stay in character subtly; don't make a big deal out of being a fox unless the user brings it up first.";
+
 const DEFAULT_SETTINGS = {
   provider: "ollama",
   ollamaUrl: "http://localhost:11434",
-  customApiUrl: "",
+  customApiUrl: "https://openrouter.ai/api/v1/chat/completions",
   customApiKey: "",
   modelName: "llama3",
   modelDisplayName: "",
-  userName: "You",
+  userName: "User",
   theme: "light",
   font: "inter",
   persona: "Dreaming",
   customPrompt: "",
   showMascot: true,
+  fontSize: 14,
+  mascotPersonaEnabled: true,
+  maxTokens: 4096,
 };
 
 const ls = {
@@ -63,30 +106,28 @@ const ls = {
 };
 
 // ─── Mascot ───────────────────────────────────────────────────────────────────
-function FoxMascot({ state = "idle", size = 480 }) {
-  const [display, setDisplay] = useState({ img: "/mascot/idle.png", instant: false });
-  const [loadedSet, setLoadedSet] = useState(() => new Set());
+function FoxMascot({ state = "idle", size = 480, isDark = false }) {
+  const images = isDark ? MASCOT_IMAGES_DARK : MASCOT_IMAGES_LIGHT;
+  const [display, setDisplay] = useState({ img: images[0], instant: false });
 
   const blinkTimerRef = useRef(null);
   const blinkEndTimerRef = useRef(null);
 
-  const ALL_IMAGES = [
-    "/mascot/idle.png",
-    "/mascot/idle_blink.png",
-    "/mascot/think.png",
-    "/mascot/answer.png",
-    "/mascot/answer2.png",
-  ];
-
   useEffect(() => {
-    ALL_IMAGES.forEach((src) => {
+    ALL_MASCOT_IMAGES.forEach((src) => {
       const img = new Image();
-      img.onload = () => {
-        setLoadedSet((prev) => new Set(prev).add(src));
-      };
       img.src = src;
     });
   }, []);
+
+  useEffect(() => {
+    setDisplay((prev) => {
+      const idx = images.findIndex((_, i) =>
+        (isDark ? MASCOT_IMAGES_LIGHT : MASCOT_IMAGES_DARK)[i] === prev.img
+      );
+      return { img: images[idx !== -1 ? idx : 0], instant: true };
+    });
+  }, [isDark]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let cancelled = false;
@@ -99,29 +140,29 @@ function FoxMascot({ state = "idle", size = 480 }) {
     stopBlinkLoop();
 
     if (state === "thinking") {
-      setDisplay({ img: "/mascot/think.png", instant: false });
+      setDisplay({ img: images[2], instant: false }); // think.png
       return () => { cancelled = true; };
     }
 
     if (state === "answering") {
       setDisplay({
-        img: Math.random() < 0.5 ? "/mascot/answer.png" : "/mascot/answer2.png",
+        img: Math.random() < 0.5 ? images[3] : images[4], // answer / answer2
         instant: false,
       });
       return () => { cancelled = true; };
     }
 
-    setDisplay({ img: "/mascot/idle.png", instant: false });
+    setDisplay({ img: images[0], instant: false }); // idle
 
     const scheduleBlink = () => {
       if (cancelled) return;
       const nextBlink = 2500 + Math.random() * 3000;
       blinkTimerRef.current = setTimeout(() => {
         if (cancelled) return;
-        setDisplay({ img: "/mascot/idle_blink.png", instant: true });
+        setDisplay({ img: images[1], instant: true }); // idle_blink
         blinkEndTimerRef.current = setTimeout(() => {
           if (cancelled) return;
-          setDisplay({ img: "/mascot/idle.png", instant: true });
+          setDisplay({ img: images[0], instant: true }); // idle
           scheduleBlink();
         }, 150);
       }, nextBlink);
@@ -130,11 +171,11 @@ function FoxMascot({ state = "idle", size = 480 }) {
     scheduleBlink();
 
     return () => { cancelled = true; stopBlinkLoop(); };
-  }, [state]);
+  }, [state, isDark]);
 
   return (
     <div style={{ position: "relative", width: size, height: size }}>
-      {ALL_IMAGES.map((src) => (
+      {images.map((src) => (
         <img
           key={src}
           src={src}
@@ -172,7 +213,7 @@ function InlineText({ text }) {
   );
 }
 
-function MessageContent({ text, isDark }) {
+function MessageContent({ text, isDark, fontSize = 14 }) {
   const codeClass = isDark ? "bg-[#16181d] text-slate-200 border border-[#272a31]" : "bg-[#f1f5f9] text-slate-800 border border-[#cbd5e1]";
   const elements = [];
   let inCode = false, codeBuf = [], k = 0;
@@ -188,16 +229,16 @@ function MessageContent({ text, isDark }) {
   text.split("\n").forEach((line) => {
     if (line.startsWith("```")) { if (inCode) flushCode(); inCode = !inCode; return; }
     if (inCode) { codeBuf.push(line); return; }
-    if (line.startsWith("### ")) elements.push(<h3 key={k++} className="text-sm font-semibold mt-4 mb-1">{line.slice(4)}</h3>);
-    else if (line.startsWith("## ")) elements.push(<h2 key={k++} className="text-base font-bold mt-5 mb-1.5">{line.slice(3)}</h2>);
-    else if (line.startsWith("# ")) elements.push(<h1 key={k++} className="text-lg font-bold mt-5 mb-2">{line.slice(2)}</h1>);
+    if (line.startsWith("### ")) elements.push(<h3 key={k++} style={{ fontSize: "1.05em" }} className="font-semibold mt-4 mb-1">{line.slice(4)}</h3>);
+    else if (line.startsWith("## ")) elements.push(<h2 key={k++} style={{ fontSize: "1.2em" }} className="font-bold mt-5 mb-1.5">{line.slice(3)}</h2>);
+    else if (line.startsWith("# ")) elements.push(<h1 key={k++} style={{ fontSize: "1.35em" }} className="font-bold mt-5 mb-2">{line.slice(2)}</h1>);
     else if (line.startsWith("- ") || line.startsWith("* ")) elements.push(<li key={k++} className="ml-5 list-disc leading-relaxed my-0.5"><InlineText text={line.slice(2)} /></li>);
     else if (/^\d+\. /.test(line)) elements.push(<li key={k++} className="ml-5 list-decimal leading-relaxed my-0.5"><InlineText text={line.replace(/^\d+\. /, "")} /></li>);
     else if (!line.trim()) elements.push(<div key={k++} className="h-3" />);
     else elements.push(<p key={k++} className="leading-[1.75] my-0.5"><InlineText text={line} /></p>);
   });
   if (inCode) flushCode();
-  return <div className="text-sm">{elements}</div>;
+  return <div style={{ fontSize: `${fontSize}px` }}>{elements}</div>;
 }
 
 function TypingDots({ isDark }) {
@@ -213,6 +254,38 @@ function TypingDots({ isDark }) {
     </div>
   );
 }
+
+const ChatMessage = memo(function ChatMessage({
+  msg, isDark, fontSize, isStreamingThis, showRegenerate, onRegenerate, userBg, userTxt, muted, hov,
+}) {
+  if (msg.role === "user") {
+    return (
+      <div className="flex justify-end">
+        <div className={`leading-relaxed px-4 py-2.5 rounded-2xl max-w-[82%] ${userBg} ${userTxt}`}>
+          {msg.content}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1 pr-4 group relative">
+      {msg.content === "" && isStreamingThis
+        ? <TypingDots isDark={isDark} />
+        : <MessageContent text={msg.content} isDark={isDark} fontSize={fontSize} />}
+      {showRegenerate && (
+        <div className="flex items-center gap-2 pt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => onRegenerate(msg.id)}
+            title="Regenerate full response"
+            className={`p-1 rounded-md text-xs flex items-center gap-1 ${muted} ${hov} transition-all`}>
+            <RotateCw size={11} />
+            <span className="text-[10px]">{msg.isError ? "Retry" : "Regenerate"}</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+});
 
 // ─── Settings Modal ───────────────────────────────────────────────────────────
 
@@ -246,10 +319,18 @@ const customFetchingRef = useRef(false);
 
 const deriveModelsUrl = (chatUrl) => {
   try {
-    const url = new URL(chatUrl.trim());
+    const style = detectApiStyle(chatUrl);
+    const url = new URL(normalizeChatUrl(chatUrl, style));
     const segments = url.pathname.split("/").filter(Boolean);
-    if (segments.length === 0) return null;
-    segments[segments.length - 1] = "models";
+
+    if (style === "anthropic") {
+      segments[segments.length - 1] = "models"; // .../v1/messages → .../v1/models
+    } else {
+      if (segments[segments.length - 1] === "completions") segments.pop();
+      if (segments[segments.length - 1] === "responses") segments.pop();
+      if (segments[segments.length - 1] === "chat") segments.pop();
+      segments.push("models");
+    }
     url.pathname = "/" + segments.join("/");
     return url.toString();
   } catch {
@@ -259,6 +340,7 @@ const deriveModelsUrl = (chatUrl) => {
 
 const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
   if (!chatUrl || customFetchingRef.current) return;
+  const style = detectApiStyle(chatUrl);
   const modelsUrl = deriveModelsUrl(chatUrl);
   if (!modelsUrl) return;
 
@@ -266,10 +348,11 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
   setLoadingCustomModels(true);
   setCustomModelError(null);
   try {
-    const text = await invoke("http_get_json", {
-      url: modelsUrl,
-      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
-    });
+    const headers = style === "anthropic"
+      ? (apiKey ? { "x-api-key": apiKey, "anthropic-version": "2023-06-01" } : {})
+      : (apiKey ? { Authorization: `Bearer ${apiKey}` } : {});
+
+    const text = await invoke("http_get_json", { url: modelsUrl, headers });
     const data = JSON.parse(text);
     const list = (data.data || data.models || []).map((m) => m.id || m.name).filter(Boolean);
 
@@ -393,7 +476,6 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
                     </div>
                   )}
                 </div>
-
                 <div>
                   <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Name for the model</p>
                   <input value={loc.modelDisplayName ?? ""} onChange={(e) => set("modelDisplayName", e.target.value)}
@@ -468,11 +550,31 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
             )}
           </div>
 
+          {/* Max Response Length */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Max Response Length</p>
+              <span className={`text-[10px] font-mono ${muted}`}>{loc.maxTokens.toLocaleString()} tokens</span>
+            </div>
+            <input
+              type="range"
+              min={256}
+              max={8192}
+              step={256}
+              value={loc.maxTokens}
+              onChange={(e) => set("maxTokens", Number(e.target.value))}
+              className="w-full accent-slate-500 cursor-pointer"
+            />
+            <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
+              Upper limit on how long a single response can be (the model's max_tokens parameter). Lower values respond faster and use less quota; higher values allow longer answers.
+            </p>
+          </div>
+
           {/* User Name */}
           <div>
-            <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Name</p>
+            <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Your Name</p>
             <input value={loc.userName} onChange={(e) => set("userName", e.target.value)}
-              placeholder="Your name"
+              placeholder="Name you want the model to call you"
               className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
           </div>
 
@@ -488,6 +590,23 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Text Size */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Text Size</p>
+              <span className={`text-[10px] font-mono ${muted}`}>{loc.fontSize}px</span>
+            </div>
+            <input
+              type="range"
+              min={12}
+              max={20}
+              step={1}
+              value={loc.fontSize}
+              onChange={(e) => set("fontSize", Number(e.target.value))}
+              className="w-full accent-slate-500 cursor-pointer"
+            />
           </div>
 
           {/* Mascot Toggle */}
@@ -512,6 +631,37 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
                 />
               </button>
             </div>
+
+            <AnimatePresence>
+              {loc.showMascot && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden">
+                  <div className="flex items-center justify-between pt-3">
+                    <div>
+                      <p className="text-xs font-medium">Add Mascot Preferences</p>
+                      <p className={`text-[10px] ${muted} mt-0.5`}>Let Cloudy's personality color every response, even with a custom prompt</p>
+                    </div>
+                    <button
+                      onClick={() => set("mascotPersonaEnabled", !loc.mascotPersonaEnabled)}
+                      className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${
+                        loc.mascotPersonaEnabled
+                          ? (isDark ? "bg-slate-200" : "bg-slate-900")
+                          : (isDark ? "bg-[#272a31]" : "bg-[#cbd5e1]")
+                      }`}>
+                      <motion.span
+                        layout
+                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                        className={`absolute top-0.5 w-5 h-5 rounded-full ${isDark ? "bg-[#121417]" : "bg-white"}`}
+                        style={{ left: loc.mascotPersonaEnabled ? "18px" : "2px" }}
+                      />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
 
@@ -574,7 +724,6 @@ export default function App() {
   const [greetingIndex, setGreetingIndex] = useState(() => Math.floor(Math.random() * GREETING_TEMPLATES.length));
   const endRef = useRef(null);
   const inputRef = useRef(null);
-  const abortRef = useRef(null);
   const currentRequestIdRef = useRef(null);
   const textareaRef = useRef(null);
   const streamRunRef = useRef(0);
@@ -609,14 +758,14 @@ export default function App() {
   }, [streaming, activeChatId]);
 
   useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (abortRef.current) {
-        abortRef.current.abort();
-      }
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, []);
+  const handleBeforeUnload = () => {
+    if (currentRequestIdRef.current) {
+      invoke("abort_stream", { requestId: currentRequestIdRef.current }).catch(() => {});
+    }
+  };
+  window.addEventListener("beforeunload", handleBeforeUnload);
+  return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+}, []);
 
   const newChat = useCallback(() => {
     const id = uid();
@@ -636,17 +785,21 @@ export default function App() {
   }, [activeChatId]);
 
   const getSystemPrompt = useCallback(() => {
-    const base = settings.persona === "Custom"
-      ? (settings.customPrompt || "You are a helpful assistant.")
-      : (PERSONAS[settings.persona]?.prompt ?? PERSONAS.Studying.prompt);
+  const base = settings.persona === "Custom"
+    ? (settings.customPrompt || "You are a helpful assistant.")
+    : (PERSONAS[settings.persona]?.prompt ?? PERSONAS.Studying.prompt);
 
-    const parts = [base];
-    if (settings.userName) parts.push(`User's name is ${settings.userName}.`);
-    const modelCustomName = settings.modelDisplayName || settings.modelName;
-    if (modelCustomName) parts.push(`Your name is ${modelCustomName}.`);
-    return parts.join("\n\n").trim();
-  }, [settings.persona, settings.customPrompt, settings.userName, settings.modelDisplayName, settings.modelName]);
-
+  const parts = [base];
+  if (settings.userName) parts.push(`User's name is ${settings.userName}.`);
+  const modelCustomName = settings.modelDisplayName || settings.modelName;
+  if (modelCustomName) parts.push(`Your name is ${modelCustomName}.`);
+  if (settings.showMascot && settings.mascotPersonaEnabled) parts.push(MASCOT_PERSONA_PROMPT);
+  return parts.join("\n\n").trim();
+}, [
+  settings.persona, settings.customPrompt, settings.userName,
+  settings.modelDisplayName, settings.modelName,
+  settings.showMascot, settings.mascotPersonaEnabled,
+]);
   // Core stream runner with robust error protection
 const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
   if (!apiMsgs || !apiMsgs.length) return;
@@ -661,7 +814,7 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
   const thinkStartedAt = performance.now();
 
   await new Promise(requestAnimationFrame);
-  ls.set("cozy_pending_stream", { chatId, aId });
+  ls.set("cozy_pending_stream", { chatId, aId, requestId });
 
   let buf = "";
   let lineBuffer = "";
@@ -687,20 +840,24 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
     }
   };
 
-  const processRawChunk = (raw) => {
-    lineBuffer += raw;
-    const lines = lineBuffer.split("\n");
-    lineBuffer = lines.pop() || "";
-    for (const rawLine of lines) {
-      const line = rawLine.startsWith("data:") ? rawLine.slice(5).trim() : rawLine.trim();
-      if (!line || line === "[DONE]") continue;
-      try {
-        const parsed = JSON.parse(line);
-        const token = parsed.message?.content ?? parsed.choices?.[0]?.delta?.content ?? "";
-        if (token) applyToken(token);
-      } catch {}
-    }
-  };
+ const processRawChunk = (raw) => {
+  lineBuffer += raw;
+  const lines = lineBuffer.split("\n");
+  lineBuffer = lines.pop() || "";
+  for (const rawLine of lines) {
+    const line = rawLine.startsWith("data:") ? rawLine.slice(5).trim() : rawLine.trim();
+    if (!line || line === "[DONE]") continue;
+    try {
+      const parsed = JSON.parse(line);
+      const token =
+        parsed.message?.content ??               // Ollama
+        parsed.choices?.[0]?.delta?.content ??    // OpenAI
+        parsed.delta?.text ??                     // Anthropic content_block_delta
+        "";
+      if (token) applyToken(token);
+    } catch {}
+  }
+};
 
   await new Promise(async (resolve) => {
     const unlistenChunk = await listen(`stream-chunk-${requestId}`, (e) => processRawChunk(e.payload));
@@ -748,14 +905,53 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
 
     try {
       const isOllama = settings.provider === "ollama";
-      const url = isOllama ? `${settings.ollamaUrl}/api/chat` : settings.customApiUrl;
-      const headers = {
-        "Content-Type": "application/json",
-        ...(!isOllama && settings.customApiKey ? { Authorization: `Bearer ${settings.customApiKey}` } : {}),
-      };
-      const body = JSON.stringify({ model: settings.modelName, messages: apiMsgs, stream: true });
+      let url, headers, body;
+
+      if (isOllama) {
+        url = `${settings.ollamaUrl}/api/chat`;
+        headers = { "Content-Type": "application/json" };
+        body = JSON.stringify({
+          model: settings.modelName,
+          messages: apiMsgs,
+          stream: true,
+          options: { num_predict: settings.maxTokens },
+        });
+      } else {
+        const style = detectApiStyle(settings.customApiUrl);
+        url = normalizeChatUrl(settings.customApiUrl, style);
+
+        if (style === "anthropic") {
+          const systemMsg = apiMsgs.find((m) => m.role === "system");
+          const restMsgs = apiMsgs.filter((m) => m.role !== "system");
+          headers = {
+            "Content-Type": "application/json",
+            "anthropic-version": "2023-06-01",
+            ...(settings.customApiKey ? { "x-api-key": settings.customApiKey } : {}),
+          };
+          body = JSON.stringify({
+            model: settings.modelName,
+            system: systemMsg?.content,
+            messages: restMsgs,
+            max_tokens: settings.maxTokens,
+            stream: true,
+          });
+        } else {
+          headers = {
+            "Content-Type": "application/json",
+            ...(settings.customApiKey ? { Authorization: `Bearer ${settings.customApiKey}` } : {}),
+          };
+          body = JSON.stringify({
+            model: settings.modelName,
+            messages: apiMsgs,
+            stream: true,
+            max_tokens: settings.maxTokens,
+          });
+        }
+      }
+
       await invoke("stream_chat", { requestId, url, headers, body });
     } catch (err) {
+      ls.set("cozy_pending_stream", null);
       setChats((p) => p.map((c) => c.id === chatId
         ? { ...c, messages: c.messages.map((m) => m.id === aId ? { ...m, content: `⚠️ **Error:** ${err}`, isError: true } : m) }
         : c));
@@ -772,46 +968,20 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
 }, [settings]);
 
   // Safely auto-resume on reload with debounce
-  useEffect(() => {
-    const pending = ls.get("cozy_pending_stream", null);
-    if (!pending || !pending.chatId || !pending.aId) return;
+ useEffect(() => {
+  const pending = ls.get("cozy_pending_stream", null);
+  if (!pending || !pending.chatId || !pending.aId) return;
 
-    const timer = setTimeout(() => {
-      const chat = chats.find((c) => c.id === pending.chatId);
-      if (!chat) return;
+  if (pending.requestId) {
+    invoke("abort_stream", { requestId: pending.requestId }).catch(() => {});
+  }
 
-      const msgIndex = chat.messages.findIndex((m) => m.id === pending.aId);
-      if (msgIndex === -1) return;
-
-      const priorMsgs = chat.messages.slice(0, msgIndex);
-      const validPrior = priorMsgs
-        .filter((m) => m && m.content && m.content.trim() && !m.content.startsWith("⚠️"))
-        .map((m) => ({ role: m.role, content: m.content.trim() }));
-
-      if (validPrior.length > 0) {
-        const apiMsgs = [
-          { role: "system", content: getSystemPrompt() },
-          ...validPrior,
-        ];
-        streamResponse(pending.chatId, pending.aId, apiMsgs);
-      }
-    }, 350);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  const regenerateResponse = useCallback((chatId, aId) => {
-    if (streaming) return;
-    const chat = chats.find((c) => c.id === chatId);
+  const timer = setTimeout(() => {
+    const chat = chats.find((c) => c.id === pending.chatId);
     if (!chat) return;
 
-    const msgIndex = chat.messages.findIndex((m) => m.id === aId);
+    const msgIndex = chat.messages.findIndex((m) => m.id === pending.aId);
     if (msgIndex === -1) return;
-
-    // Reset this assistant message content to empty for streaming
-    setChats((prev) => prev.map((c) => c.id === chatId
-      ? { ...c, messages: c.messages.map((m) => m.id === aId ? { ...m, content: "", isError: false } : m) }
-      : c));
 
     const priorMsgs = chat.messages.slice(0, msgIndex);
     const validPrior = priorMsgs
@@ -823,50 +993,83 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
         { role: "system", content: getSystemPrompt() },
         ...validPrior,
       ];
-      streamResponse(chatId, aId, apiMsgs);
+      streamResponse(pending.chatId, pending.aId, apiMsgs);
     }
-  }, [chats, streaming, getSystemPrompt, streamResponse]);
+  }, 350);
 
-  const sendMessage = useCallback(async () => {
-    const text = input.trim();
-    if (!text || streaming) return;
+  return () => clearTimeout(timer);
+}, []);
 
-    let chatId = activeChatId;
-    if (!chatId) {
-      chatId = uid();
-      setChats((p) => [{ id: chatId, title: text.slice(0, 36), messages: [], createdAt: Date.now() }, ...p]);
-      setActiveChatId(chatId);
-    }
+const chatsRef = useRef(chats);
+useEffect(() => { chatsRef.current = chats; }, [chats]);
 
-    const prior = (chats.find((c) => c.id === chatId)?.messages ?? [])
-      .filter((m) => m && m.content && m.content.trim() && !m.content.startsWith("⚠️"));
+const regenerateResponse = useCallback((chatId, aId) => {
+  if (streaming) return;
+  const chat = chatsRef.current.find((c) => c.id === chatId);
+  if (!chat) return;
 
-    const userMsg = { id: uid(), role: "user", content: text, ts: Date.now() };
-    const aId = uid();
-    const aMsg = { id: aId, role: "assistant", content: "", ts: Date.now() };
+  const msgIndex = chat.messages.findIndex((m) => m.id === aId);
+  if (msgIndex === -1) return;
 
-    setChats((p) => p.map((c) => c.id === chatId
-      ? {
-          ...c,
-          title: c.messages.length === 0 ? text.slice(0, 36) : c.title,
-          messages: [...c.messages.filter((m) => m && m.content && m.content.trim()), userMsg, aMsg],
-        }
-      : c));
-    setInput("");
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
+  setChats((prev) => prev.map((c) => c.id === chatId
+    ? { ...c, messages: c.messages.map((m) => m.id === aId ? { ...m, content: "", isError: false } : m) }
+    : c));
 
-    const apiMsgs = [
-      { role: "system", content: getSystemPrompt() },
-      ...prior.map((m) => ({ role: m.role, content: m.content.trim() })),
-      { role: "user", content: text },
-    ];
+  const priorMsgs = chat.messages.slice(0, msgIndex);
+  const validPrior = priorMsgs
+    .filter((m) => m && m.content && m.content.trim() && !m.content.startsWith("⚠️"))
+    .map((m) => ({ role: m.role, content: m.content.trim() }));
 
+  if (validPrior.length > 0) {
+    const apiMsgs = [{ role: "system", content: getSystemPrompt() }, ...validPrior];
     streamResponse(chatId, aId, apiMsgs);
-  }, [input, streaming, activeChatId, chats, getSystemPrompt, streamResponse]);
+  }
+}, [streaming, getSystemPrompt, streamResponse]);
 
-  const handleKey = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-  };
+const handleRegenerate = useCallback((msgId) => {
+  regenerateResponse(activeChatId, msgId);
+}, [regenerateResponse, activeChatId]); 
+
+const sendMessage = useCallback(async () => {
+  const text = input.trim();
+  if (!text || streaming) return;
+
+  let chatId = activeChatId;
+  if (!chatId) {
+    chatId = uid();
+    setChats((p) => [{ id: chatId, title: text.slice(0, 36), messages: [], createdAt: Date.now() }, ...p]);
+    setActiveChatId(chatId);
+  }
+
+  const prior = (chats.find((c) => c.id === chatId)?.messages ?? [])
+    .filter((m) => m && m.content && m.content.trim() && !m.content.startsWith("⚠️"));
+
+  const userMsg = { id: uid(), role: "user", content: text, ts: Date.now() };
+  const aId = uid();
+  const aMsg = { id: aId, role: "assistant", content: "", ts: Date.now() };
+
+  setChats((p) => p.map((c) => c.id === chatId
+    ? {
+        ...c,
+        title: c.messages.length === 0 ? text.slice(0, 36) : c.title,
+        messages: [...c.messages.filter((m) => m && m.content && m.content.trim()), userMsg, aMsg],
+      }
+    : c));
+  setInput("");
+  if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+  const apiMsgs = [
+    { role: "system", content: getSystemPrompt() },
+    ...prior.map((m) => ({ role: m.role, content: m.content.trim() })),
+    { role: "user", content: text },
+  ];
+
+  streamResponse(chatId, aId, apiMsgs);
+}, [input, streaming, activeChatId, chats, getSystemPrompt, streamResponse]);
+
+const handleKey = (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+};
 
   // ── Theme tokens (Silver light mode & Dark Gray dark mode) ──
   const bg = isDark ? "bg-[#0b0c0e]" : "bg-[#e4e7eb]";
@@ -973,7 +1176,7 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
                 className="flex flex-col items-center justify-center h-full gap-2 px-6 pb-12">
                 {settings.showMascot && (
                   <div className="cursor-pointer" onClick={() => setGreetingIndex((p) => (p + 1) % GREETING_TEMPLATES.length)} title="Click to change greeting">
-                    <FoxMascot state={mascotState} size={420} />
+                    <FoxMascot state={mascotState} size={420} isDark={isDark} />
                   </div>
                 )}
                 <motion.p
@@ -994,46 +1197,31 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
                     <motion.div key={msg.id}
                       initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.15 }}>
-                      {msg.role === "user" ? (
-                        /* User message bubble */
-                        <div className="flex justify-end">
-                          <div className={`text-sm leading-relaxed px-4 py-2.5 rounded-2xl max-w-[82%] ${userBg} ${userTxt}`}>
-                            {msg.content}
-                          </div>
-                        </div>
-                      ) : (
-                        /* Assistant message block */
-                        <div className="flex flex-col gap-1 pr-4 group relative">
-                          {msg.content === "" && streaming && msg.id === streamingMsgId
-                            ? <TypingDots isDark={isDark} />
-                            : <MessageContent text={msg.content} isDark={isDark} />
-                          }
-                          {!streaming && (
-                            <div className="flex items-center gap-2 pt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() => regenerateResponse(activeChatId, msg.id)}
-                                title="Regenerate full response"
-                                className={`p-1 rounded-md text-xs flex items-center gap-1 ${muted} ${hov} transition-all`}>
-                                <RotateCw size={11} />
-                                <span className="text-[10px]">{msg.isError ? "Retry" : "Regenerate"}</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                      <ChatMessage
+                        msg={msg}
+                        isDark={isDark}
+                        fontSize={settings.fontSize}
+                        isStreamingThis={streaming && msg.id === streamingMsgId}
+                        showRegenerate={!streaming}
+                        onRegenerate={handleRegenerate}
+                        userBg={userBg}
+                        userTxt={userTxt}
+                        muted={muted}
+                        hov={hov}
+                      />
                     </motion.div>
                   ))}
                   <div ref={endRef} />
                 </div>
               </motion.div>
             )}
-          </AnimatePresence>
+            </AnimatePresence>
         </div>
 
         {/* Mascot in active chat bottom corner (256px Mascot Size) */}
         {hasMessages && settings.showMascot && (
           <div className="absolute bottom-20 right-6 pointer-events-none opacity-80">
-            <FoxMascot state={mascotState} size={256} />
+            <FoxMascot state={mascotState} size={256} isDark={isDark} />
           </div>
         )}
 
@@ -1052,8 +1240,8 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
               rows={1}
               placeholder="Message…"
               disabled={streaming}
-              className={`flex-1 bg-transparent text-sm resize-none outline-none py-1.5 leading-5 block ${isDark ? "text-[#f1f5f9] placeholder-[#52525b]" : "text-[#0f172a] placeholder-[#94a3b8]"}`}
-              style={{ maxHeight: 180 }}
+              className={`flex-1 bg-transparent resize-none outline-none py-1.5 leading-5 block ${isDark ? "text-[#f1f5f9] placeholder-[#52525b]" : "text-[#0f172a] placeholder-[#94a3b8]"}`}
+              style={{ maxHeight: 180, fontSize: `${settings.fontSize}px` }}
             />
             <div className="flex items-center gap-1 flex-shrink-0">
             {streaming && (
