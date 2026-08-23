@@ -3,6 +3,8 @@ import { Plus, Settings, Send, Trash2, X, Moon, Sun, MessageSquare, Pencil, Rota
 import { motion, AnimatePresence } from "framer-motion";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import "./index.css"
+import "./App.css";
 // ─── Constants & Helpers ──────────────────────────────────────────────────────
 
 const uid = () => Math.random().toString(36).slice(2, 10);
@@ -411,282 +413,305 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
       onClick={onClose}>
       <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0, y: 10 }} transition={{ type: "spring", stiffness: 350, damping: 30 }}
-        className={`${bg} ${txt} rounded-2xl border ${brd} shadow-xl w-full max-w-md max-h-[88vh] overflow-y-auto`}
-        onClick={(e) => e.stopPropagation()}>
+        className={`${bg} ${txt} rounded-2xl border ${brd} shadow-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto cozy-scroll`}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          "--scrollbar-thumb": isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)",
+          "--scrollbar-thumb-hover": isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.25)",
+        }}>
 
         <div className={`flex items-center justify-between px-5 py-3.5 border-b ${brd}`}>
           <h2 className="font-semibold text-sm">Settings</h2>
           <button onClick={onClose} className={`p-1.5 rounded-lg ${hov} transition-colors`}><X size={15} /></button>
         </div>
 
-        <div className="px-5 py-4 space-y-4">
-          {/* Provider */}
-          <div>
-            <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>API Provider</p>
-            <div className={`grid grid-cols-2 gap-1.5 p-1 rounded-xl mb-2.5 ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
-              {[{ v: "ollama", l: "Ollama (Local)" }, { v: "custom", l: "Custom API" }].map(({ v, l }) => (
-                <button key={v} onClick={() => set("provider", v)}
-                  className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.provider === v)}`}>{l}</button>
-              ))}
-            </div>
+        <div className="px-6 py-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
 
-            {loc.provider === "ollama" && (
-              <div className="space-y-2.5">
-                <div>
-                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Ollama URL</p>
-                  <input value={loc.ollamaUrl} onChange={(e) => set("ollamaUrl", e.target.value)}
-                    placeholder="http://localhost:11434"
-                    className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
-                  <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
-                  If running on a phone while Ollama runs on your computer, use your computer's local IP
-                  instead of localhost, e.g. http://192.168.1.10:11434
-                </p>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Model</p>
-                    <button onClick={() => fetchOllamaModels(loc.ollamaUrl)}
-                      disabled={loadingModels}
-                      title="Refresh models"
-                      className={`flex items-center gap-1 text-[10px] ${muted} hover:text-current transition-colors`}>
-                      <RotateCw size={10} className={loadingModels ? "animate-spin" : ""} />
-                      <span>Refresh</span>
-                    </button>
-                  </div>
-                  {ollamaModels.length > 0 ? (
-                    <select
-                      value={loc.modelName}
-                      onChange={(e) => set("modelName", e.target.value)}
-                      className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors cursor-pointer`}>
-                      {ollamaModels.map((m) => (
-                        <option key={m} value={m} className={isDark ? "bg-[#181a1e] text-white" : "bg-white text-slate-900"}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div>
-                      <input value={loc.modelName} onChange={(e) => set("modelName", e.target.value)}
-                        placeholder="llama3, mistral, deepseek-r1…"
-                        className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
-                      {modelError && (
-                        <p className="text-[10px] text-amber-500 mt-1">{modelError}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Name for the model</p>
-                  <input value={loc.modelDisplayName ?? ""} onChange={(e) => set("modelDisplayName", e.target.value)}
-                    placeholder="e.g. Assistant, Fox, Llama…"
-                    className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
-                </div>
-              </div>
-            )}
-
-            {loc.provider === "custom" && (
-              <div className="space-y-2.5">
-                <div>
-                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Endpoint URL</p>
-                  <input value={loc.customApiUrl} onChange={(e) => set("customApiUrl", e.target.value)}
-                    placeholder="https://api.openai.com/v1/chat/completions"
-                    className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
-                          <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
-                           Some AI providers may block the direct API connection (CORS policy).
-                          If your request returns a network error, it may be the connection being blocked by the AI provider.
-                        </p>
-                </div>
-                <div>
-                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>API Key</p>
-                  <input value={loc.customApiKey} onChange={(e) => set("customApiKey", e.target.value)}
-                    placeholder="API Key" type="password"
-                    className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
-                    <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
-                    Your key is stored only in this browser and sent directly to the selected provider —
-                    we never see it or store it anywhere.
-                  </p>
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Model Name</p>
-                    <button onClick={() => fetchCustomModels(loc.customApiUrl, loc.customApiKey)}
-                      disabled={loadingCustomModels || !loc.customApiUrl}
-                      title="Try to fetch model list"
-                      className={`flex items-center gap-1 text-[10px] ${muted} hover:text-current transition-colors disabled:opacity-40`}>
-                      <RotateCw size={10} className={loadingCustomModels ? "animate-spin" : ""} />
-                      <span>Fetch models</span>
-                    </button>
-                  </div>
-                  {customModels.length > 0 ? (
-                    <select
-                      value={loc.modelName}
-                      onChange={(e) => set("modelName", e.target.value)}
-                      className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors cursor-pointer`}>
-                      {customModels.map((m) => (
-                        <option key={m} value={m} className={isDark ? "bg-[#181a1e] text-white" : "bg-white text-slate-900"}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div>
-                      <input value={loc.modelName} onChange={(e) => set("modelName", e.target.value)}
-                        placeholder="gpt-4o, claude-3-5-sonnet, mistral…"
-                        className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
-                      {customModelError && (
-                        <p className="text-[10px] text-amber-500 mt-1">{customModelError}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Name for the model</p>
-                  <input value={loc.modelDisplayName ?? ""} onChange={(e) => set("modelDisplayName", e.target.value)}
-                    placeholder="e.g. Assistant, Fox, AI…"
-                    className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Max Response Length */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Max Response Length</p>
-              <span className={`text-[10px] font-mono ${muted}`}>{loc.maxTokens.toLocaleString()} tokens</span>
-            </div>
-            <input
-              type="range"
-              min={256}
-              max={8192}
-              step={256}
-              value={loc.maxTokens}
-              onChange={(e) => set("maxTokens", Number(e.target.value))}
-              className="w-full accent-slate-500 cursor-pointer"
-            />
-            <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
-              Upper limit on how long a single response can be (the model's max_tokens parameter). Lower values respond faster and use less quota; higher values allow longer answers.
-            </p>
-          </div>
-
-          {/* User Name */}
-          <div>
-            <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Your Name</p>
-            <input value={loc.userName} onChange={(e) => set("userName", e.target.value)}
-              placeholder="Name you want the model to call you"
-              className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
-          </div>
-
-          {/* Font Selection */}
-          <div>
-            <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>Font</p>
-            <div className={`grid grid-cols-3 gap-1.5 p-1 rounded-xl ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
-              {Object.entries(FONTS).map(([key, f]) => (
-                <button key={key} onClick={() => set("font", key)}
-                  style={{ fontFamily: f.value }}
-                  className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.font === key)}`}>
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Text Size */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Text Size</p>
-              <span className={`text-[10px] font-mono ${muted}`}>{loc.fontSize}px</span>
-            </div>
-            <input
-              type="range"
-              min={12}
-              max={20}
-              step={1}
-              value={loc.fontSize}
-              onChange={(e) => set("fontSize", Number(e.target.value))}
-              className="w-full accent-slate-500 cursor-pointer"
-            />
-          </div>
-
-          {/* Mascot Toggle */}
-          <div>
-            <div className="flex items-center justify-between">
+            {/* ── Left column: Provider & model ── */}
+            <div className="space-y-3">
+              {/* Provider */}
               <div>
-                <p className="text-xs font-medium">Show Mascot</p>
-                <p className={`text-[10px] ${muted} mt-0.5`}>Hide Cloudy from chat</p>
-              </div>
-              <button
-                onClick={() => set("showMascot", !loc.showMascot)}
-                className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${
-                  loc.showMascot
-                    ? (isDark ? "bg-slate-200" : "bg-slate-900")
-                    : (isDark ? "bg-[#272a31]" : "bg-[#cbd5e1]")
-                }`}>
-                <motion.span
-                  layout
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  className={`absolute top-0.5 w-5 h-5 rounded-full ${isDark ? "bg-[#121417]" : "bg-white"}`}
-                  style={{ left: loc.showMascot ? "18px" : "2px" }}
-                />
-              </button>
-            </div>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5 mt-0`}>API Provider</p>
+                <div className={`grid grid-cols-2 gap-1.5 p-1 rounded-xl mb-2.5 ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
+                  {[{ v: "ollama", l: "Ollama (Local)" }, { v: "custom", l: "Custom API" }].map(({ v, l }) => (
+                    <button key={v} onClick={() => set("provider", v)}
+                      className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.provider === v)}`}>{l}</button>
+                  ))}
+                </div>
 
-            <AnimatePresence>
-              {loc.showMascot && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="overflow-hidden">
-                  <div className="flex items-center justify-between pt-3">
+                {loc.provider === "ollama" && (
+                  <div className="space-y-2.5">
                     <div>
-                      <p className="text-xs font-medium">Add Mascot Preferences</p>
-                      <p className={`text-[10px] ${muted} mt-0.5`}>Let Cloudy's personality color every response, even with a custom prompt</p>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1 mt-0`}>Ollama URL</p>
+                      <input value={loc.ollamaUrl} onChange={(e) => set("ollamaUrl", e.target.value)}
+                        placeholder="http://localhost:11434"
+                        className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
+                      <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
+                      If running on a phone while Ollama runs on your computer, use your computer's local IP
+                      instead of localhost, e.g. http://192.168.1.10:11434
+                    </p>
                     </div>
-                    <button
-                      onClick={() => set("mascotPersonaEnabled", !loc.mascotPersonaEnabled)}
-                      className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${
-                        loc.mascotPersonaEnabled
-                          ? (isDark ? "bg-slate-200" : "bg-slate-900")
-                          : (isDark ? "bg-[#272a31]" : "bg-[#cbd5e1]")
-                      }`}>
-                      <motion.span
-                        layout
-                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                        className={`absolute top-0.5 w-5 h-5 rounded-full ${isDark ? "bg-[#121417]" : "bg-white"}`}
-                        style={{ left: loc.mascotPersonaEnabled ? "18px" : "2px" }}
-                      />
-                    </button>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Model</p>
+                        <button onClick={() => fetchOllamaModels(loc.ollamaUrl)}
+                          disabled={loadingModels}
+                          title="Refresh models"
+                          className={`flex items-center gap-1 text-[10px] ${muted} hover:text-current transition-colors`}>
+                          <RotateCw size={10} className={loadingModels ? "animate-spin" : ""} />
+                          <span>Refresh</span>
+                        </button>
+                      </div>
+                      {ollamaModels.length > 0 ? (
+                        <select
+                          value={loc.modelName}
+                          onChange={(e) => set("modelName", e.target.value)}
+                          className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors cursor-pointer`}>
+                          {ollamaModels.map((m) => (
+                            <option key={m} value={m} className={isDark ? "bg-[#181a1e] text-white" : "bg-white text-slate-900"}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div>
+                          <input value={loc.modelName} onChange={(e) => set("modelName", e.target.value)}
+                            placeholder="llama3, mistral, deepseek-r1…"
+                            className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
+                          {modelError && (
+                            <p className="text-[10px] text-amber-500 mt-1">{modelError}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Name for the model</p>
+                      <input value={loc.modelDisplayName ?? ""} onChange={(e) => set("modelDisplayName", e.target.value)}
+                        placeholder="e.g. Assistant, Fox, Llama…"
+                        className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
+                    </div>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                )}
 
+                {loc.provider === "custom" && (
+                  <div className="space-y-2.5">
+                    <div>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Endpoint URL</p>
+                      <input value={loc.customApiUrl} onChange={(e) => set("customApiUrl", e.target.value)}
+                        placeholder="https://api.openai.com/v1/chat/completions"
+                        className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
+                              <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
+                              Some AI providers may block the direct API connection (CORS policy).
+                              If your request returns a network error, it may be the connection being blocked by the AI provider.
+                            </p>
+                    </div>
+                    <div>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>API Key</p>
+                      <input value={loc.customApiKey} onChange={(e) => set("customApiKey", e.target.value)}
+                        placeholder="API Key" type="password"
+                        className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
+                        <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
+                        Your key is stored only in this browser and sent directly to the selected provider —
+                        we never see it or store it anywhere.
+                      </p>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Model Name</p>
+                        <button onClick={() => fetchCustomModels(loc.customApiUrl, loc.customApiKey)}
+                          disabled={loadingCustomModels || !loc.customApiUrl}
+                          title="Try to fetch model list"
+                          className={`flex items-center gap-1 text-[10px] ${muted} hover:text-current transition-colors disabled:opacity-40`}>
+                          <RotateCw size={10} className={loadingCustomModels ? "animate-spin" : ""} />
+                          <span>Fetch models</span>
+                        </button>
+                      </div>
+                      {customModels.length > 0 ? (
+                        <select
+                          value={loc.modelName}
+                          onChange={(e) => set("modelName", e.target.value)}
+                          className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors cursor-pointer`}>
+                          {customModels.map((m) => (
+                            <option key={m} value={m} className={isDark ? "bg-[#181a1e] text-white" : "bg-white text-slate-900"}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div>
+                          <input value={loc.modelName} onChange={(e) => set("modelName", e.target.value)}
+                            placeholder="gpt-4o, claude-3-5-sonnet, mistral…"
+                            className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
+                          {customModelError && (
+                            <p className="text-[10px] text-amber-500 mt-1">{customModelError}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Name for the model</p>
+                      <input value={loc.modelDisplayName ?? ""} onChange={(e) => set("modelDisplayName", e.target.value)}
+                        placeholder="e.g. Assistant, Fox, AI…"
+                        className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
+                    </div>
+                  </div>
+                )}
+              </div>
 
-          {/* System Prompt Category */}
-          <div className="pt-1">
-            <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>System prompt</p>
-            <div className={`grid grid-cols-3 gap-1.5 p-1 rounded-xl mb-2 ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
-              {["Studying", "Dreaming", "Custom"].map((key) => (
-                <button key={key} onClick={() => set("persona", key)}
-                  className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.persona === key)}`}>
-                  {key}
-                </button>
-              ))}
+              {/* Max Response Length */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Max Response Length</p>
+                  <span className={`text-[10px] font-mono ${muted}`}>{loc.maxTokens.toLocaleString()} tokens</span>
+                </div>
+                <input
+                  type="range"
+                  min={256}
+                  max={8192}
+                  step={256}
+                  value={loc.maxTokens}
+                  onChange={(e) => set("maxTokens", Number(e.target.value))}
+                  className="cozy-slider w-full"
+                  style={{
+                    "--slider-track": isDark ? "#272a31" : "#cbd5e1",
+                    "--slider-thumb": isDark ? "#f1f5f9" : "#0f172a",
+                    "--slider-thumb-border": isDark ? "#121417" : "#ffffff",
+                  }}
+                />
+                <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
+                  Upper limit on how long a single response can be (the model's max_tokens parameter). Lower values respond faster and use less quota; higher values allow longer answers.
+                </p>
+              </div>
             </div>
 
-            <AnimatePresence>
-              {loc.persona === "Custom" && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
-                  <textarea value={loc.customPrompt} onChange={(e) => set("customPrompt", e.target.value)}
-                    placeholder="Type custom system prompt for the model…"
-                    className={`w-full rounded-xl border px-3 py-2 text-xs resize-none ${inp} focus:outline-none focus:border-slate-400 transition-colors`}
-                    rows={4} />
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* ── Right column: Appearance & persona ── */}
+            <div className="space-y-3">
+              {/* User Name */}
+              <div>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Your Name</p>
+                <input value={loc.userName} onChange={(e) => set("userName", e.target.value)}
+                  placeholder="Name you want the model to call you"
+                  className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
+              </div>
+
+              {/* Font Selection */}
+              <div>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>Font</p>
+                <div className={`grid grid-cols-3 gap-1.5 p-1 rounded-xl ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
+                  {Object.entries(FONTS).map(([key, f]) => (
+                    <button key={key} onClick={() => set("font", key)}
+                      style={{ fontFamily: f.value }}
+                      className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.font === key)}`}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Text Size */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Text Size</p>
+                  <span className={`text-[10px] font-mono ${muted}`}>{loc.fontSize}px</span>
+                </div>
+                <input
+                  type="range"
+                  min={12}
+                  max={20}
+                  step={1}
+                  value={loc.fontSize}
+                  onChange={(e) => set("fontSize", Number(e.target.value))}
+                  className="cozy-slider w-full"
+                  style={{
+                    "--slider-track": isDark ? "#272a31" : "#cbd5e1",
+                    "--slider-thumb": isDark ? "#f1f5f9" : "#0f172a",
+                    "--slider-thumb-border": isDark ? "#121417" : "#ffffff",
+                  }}
+                />
+              </div>
+
+              {/* Mascot Toggle */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-medium">Show Mascot</p>
+                    <p className={`text-[10px] ${muted} mt-0.5`}>Hide Cloudy from chat</p>
+                  </div>
+                  <button
+                    onClick={() => set("showMascot", !loc.showMascot)}
+                    className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${
+                      loc.showMascot
+                        ? (isDark ? "bg-slate-200" : "bg-slate-900")
+                        : (isDark ? "bg-[#272a31]" : "bg-[#cbd5e1]")
+                    }`}>
+                    <motion.span
+                      layout
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                      className={`absolute top-0.5 w-5 h-5 rounded-full ${isDark ? "bg-[#121417]" : "bg-white"}`}
+                      style={{ left: loc.showMascot ? "18px" : "2px" }}
+                    />
+                  </button>
+                </div>
+
+                <AnimatePresence>
+                  {loc.showMascot && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden">
+                      <div className="flex items-center justify-between pt-3">
+                        <div>
+                          <p className="text-xs font-medium">Add Mascot Preferences</p>
+                          <p className={`text-[10px] ${muted} mt-0.5`}>Let Cloudy's personality color every response, even with a custom prompt</p>
+                        </div>
+                        <button
+                          onClick={() => set("mascotPersonaEnabled", !loc.mascotPersonaEnabled)}
+                          className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${
+                            loc.mascotPersonaEnabled
+                              ? (isDark ? "bg-slate-200" : "bg-slate-900")
+                              : (isDark ? "bg-[#272a31]" : "bg-[#cbd5e1]")
+                          }`}>
+                          <motion.span
+                            layout
+                            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                            className={`absolute top-0.5 w-5 h-5 rounded-full ${isDark ? "bg-[#121417]" : "bg-white"}`}
+                            style={{ left: loc.mascotPersonaEnabled ? "18px" : "2px" }}
+                          />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* System Prompt Category */}
+              <div className="pt-1">
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>System prompt</p>
+                <div className={`grid grid-cols-3 gap-1.5 p-1 rounded-xl mb-2 ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
+                  {["Studying", "Dreaming", "Custom"].map((key) => (
+                    <button key={key} onClick={() => set("persona", key)}
+                      className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.persona === key)}`}>
+                      {key}
+                    </button>
+                  ))}
+                </div>
+
+                <AnimatePresence>
+                  {loc.persona === "Custom" && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+                      <textarea value={loc.customPrompt} onChange={(e) => set("customPrompt", e.target.value)}
+                        placeholder="Type custom system prompt for the model…"
+                        className={`w-full rounded-xl border px-3 py-2 text-xs resize-none ${inp} focus:outline-none focus:border-slate-400 transition-colors`}
+                        rows={4} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+
           </div>
         </div>
 
