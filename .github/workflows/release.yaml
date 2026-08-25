@@ -31,6 +31,7 @@ jobs:
         with:
           node-version: lts/*
           cache: 'npm'
+          cache-dependency-path: 'CloudstaleProject/package-lock.json'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -44,19 +45,20 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Install frontend dependencies
+        working-directory: ./CloudstaleProject
         run: npm ci
 
       - name: Build and Release with Tauri Action
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
- 
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          projectPath: 'CloudstaleProject'
           tagName: v__VERSION__
           releaseName: "App Release v__VERSION__"
-          releaseBody: "Automatic release"
+          releaseBody: "Автоматическая сборка новой версии."
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
