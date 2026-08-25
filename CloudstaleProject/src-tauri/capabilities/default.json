@@ -6,6 +6,8 @@
   "permissions": [
     "core:default",
     "core:event:default",
+    "updater:default",
+    "dialog:default",
     {
       "identifier": "http:default",
       "allow": [

@@ -1,8 +1,14 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
-import { Plus, Settings, Send, Trash2, X, Moon, Sun, MessageSquare, Pencil, RotateCw } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Plus, Settings, Send, Trash2, X, Moon, Sun, MessageSquare, Pencil, RotateCw } from "lucide-react"; import { motion, AnimatePresence } from "framer-motion";
+import { check } from "@tauri-apps/plugin-updater";
+import { ask, message } from "@tauri-apps/plugin-dialog";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import "./index.css"
 import "./App.css";
 // ─── Constants & Helpers ──────────────────────────────────────────────────────
@@ -70,7 +76,7 @@ const GREETING_TEMPLATES = [
 const PERSONAS = {
   Studying: {
     label: "Studying",
-    prompt: "You are a focused, knowledgeable assistant. Answer questions clearly and concisely. Use examples when helpful. Encourage the user to think critically.",
+    prompt: "You are a focused, knowledgeable assistant. Answer questions clearly and concisely. Use examples when helpful. Encourage the user to think critically. CRITICAL FORMATTING RULE FOR MATH AND SCIENCE: You MUST use standard LaTeX formatting for ALL mathematical equations, formulas, fractions, and complex variables. Use single $ for inline math (e.g., The area is $A = \\pi r^2$). Use double $$ for display math blocks on a new line. NEVER use raw text approximations like 'x^2', 'sqrt(x)', 'a/b', or 'sin(x)'. NEVER use \\[ \\] or \\( \\) as delimiters — always use $ for inline and $$ for display blocks.",
   },
   Dreaming: {
     label: "Dreaming",
@@ -82,9 +88,9 @@ const PERSONAS = {
   },
 };
 
-const MASCOT_PERSONA_PROMPT = "You a friendly and curious anthro fox who lives in this chat as its mascot. Let a bit of that personality come through in how you write — warm, a little playful and whimsical, quick with a gentle touch of humor — without ever getting in the way of giving a complete, accurate, and genuinely useful answer. Stay in character subtly; don't make a big deal out of being a fox unless the user brings it up first.";
+const MASCOT_PERSONA_PROMPT = "You are friendly and curious anthro fox. Let a bit of that personality come through in how you write — warm, a little playful and whimsical, quick with a gentle touch of humor — without ever getting in the way of giving a complete, accurate, and genuinely useful answer. Stay in character.";
 
-// ─── i18n (Локализация) ───────────────────────────────────────────────────────
+// ─── i18n (Localisation) ───────────────────────────────────────────────────────
 const LANGUAGES = [
   { id: "en", label: "English" },
   { id: "ru", label: "Русский" },
@@ -101,6 +107,9 @@ const TRANSLATIONS = {
     click_to_change_greeting: "Click to change greeting",
 
     // Settings Modal
+    enable_auto_updates: "Automatic updates",
+    enable_auto_updates_hint: "Check for and install updates automatically on startup",
+    checking_for_updates: "Checking for updates…",
     persona_studying: "Studying",
     persona_dreaming: "Dreaming",
     persona_custom: "Custom",
@@ -155,6 +164,9 @@ const TRANSLATIONS = {
     click_to_change_greeting: "Нажмите, чтобы изменить приветствие",
 
     // Settings Modal
+    enable_auto_updates: "Автоматические обновления",
+    enable_auto_updates_hint: "Проверять и устанавливать обновления автоматически при запуске",
+    checking_for_updates: "Проверка обновлений…",
     persona_studying: "Учеба",
     persona_dreaming: "Грёзы",
     persona_custom: "Свой",
@@ -208,6 +220,9 @@ const TRANSLATIONS = {
     click_to_change_greeting: "Klicken, um die Begrüßung zu ändern",
 
     // Settings Modal
+    enable_auto_updates: "Automatische Updates",
+    enable_auto_updates_hint: "Beim Start automatisch nach Updates suchen und diese installieren",
+    checking_for_updates: "Suche nach Updates…",
     persona_studying: "Lernen",
     persona_dreaming: "Träumen",
     persona_custom: "Benutzerdefiniert",
@@ -275,7 +290,7 @@ const DEFAULT_SETTINGS = {
   mascotPersonaEnabled: true,
   maxTokens: 4096,
   language: "en",
-  disableAutoUpdates: false,
+  enableAutoUpdates: true,
 };
 
 const ls = {
@@ -384,49 +399,72 @@ function InlineText({ text }) {
       {parts.map((p, i) => {
         if (p.startsWith("**") && p.endsWith("**")) return <strong key={i} className="font-semibold">{p.slice(2, -2)}</strong>;
         if (p.startsWith("`") && p.endsWith("`")) return <code key={i} className="px-1.5 py-0.5 rounded text-[0.82em] font-mono bg-black/10 dark:bg-white/10">{p.slice(1, -1)}</code>;
-        if (p.startsWith("*") && p.endsWith("*")) return <em key={i}>{p.slice(1, -1)}</em>;
+        if (p.startsWith("*") && p.endsWith("*")) return <em key={i} className="italic">{p.slice(1, -1)}</em>;
         return <span key={i}>{p}</span>;
       })}
     </>
   );
 }
 
+function normalizeLatexDelimiters(text) {
+  if (!text) return text;
+  return text
+    // \[ ... \]  →  $$ ... $$
+    .replace(/\\\[([\s\S]+?)\\\]/g, (_, expr) => `$$${expr}$$`)
+    // \( ... \)  →  $ ... $
+    .replace(/\\\(([\s\S]+?)\\\)/g, (_, expr) => `$${expr}$`);
+}
+
 function MessageContent({ text, isDark, fontSize = 14 }) {
   const codeClass = isDark ? "bg-[#16181d] text-slate-200 border border-[#272a31]" : "bg-[#f1f5f9] text-slate-800 border border-[#cbd5e1]";
-  const elements = [];
-  let inCode = false, codeBuf = [], k = 0;
-  const flushCode = () => {
-    if (!codeBuf.length) return;
-    elements.push(
-      <pre key={k++} className={`my-4 rounded-xl p-4 text-[0.82em] overflow-x-auto font-mono leading-relaxed ${codeClass}`}>
-        <code>{codeBuf.join("\n")}</code>
-      </pre>
-    );
-    codeBuf = [];
-  };
-  text.split("\n").forEach((line) => {
-    if (line.startsWith("```")) { if (inCode) flushCode(); inCode = !inCode; return; }
-    if (inCode) { codeBuf.push(line); return; }
-    if (line.startsWith("### ")) elements.push(<h3 key={k++} style={{ fontSize: "1.05em" }} className="font-semibold mt-4 mb-1">{line.slice(4)}</h3>);
-    else if (line.startsWith("## ")) elements.push(<h2 key={k++} style={{ fontSize: "1.2em" }} className="font-bold mt-5 mb-1.5">{line.slice(3)}</h2>);
-    else if (line.startsWith("# ")) elements.push(<h1 key={k++} style={{ fontSize: "1.35em" }} className="font-bold mt-5 mb-2">{line.slice(2)}</h1>);
-    else if (line.startsWith("- ") || line.startsWith("* ")) elements.push(<li key={k++} className="ml-5 list-disc leading-relaxed my-0.5"><InlineText text={line.slice(2)} /></li>);
-    else if (/^\d+\. /.test(line)) elements.push(<li key={k++} className="ml-5 list-decimal leading-relaxed my-0.5"><InlineText text={line.replace(/^\d+\. /, "")} /></li>);
-    else if (!line.trim()) elements.push(<div key={k++} className="h-3" />);
-    else elements.push(<p key={k++} className="leading-[1.75] my-0.5"><InlineText text={line} /></p>);
-  });
-  if (inCode) flushCode();
-  return <div style={{ fontSize: `${fontSize}px` }}>{elements}</div>;
+
+  return (
+    <div style={{ fontSize: `${fontSize}px` }}>
+      <ReactMarkdown
+        remarkPlugins={[remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          code({ node, inline, className, children, ...props }) {
+            if (inline) {
+              return (
+                <code className="px-1.5 py-0.5 rounded text-[0.82em] font-mono bg-black/10 dark:bg-white/10" {...props}>
+                  {children}
+                </code>
+              );
+            }
+            return (
+              <pre className={`my-4 rounded-xl p-4 text-[0.82em] overflow-x-auto font-mono leading-relaxed ${codeClass}`}>
+                <code {...props}>{children}</code>
+              </pre>
+            );
+          },
+          h1: ({ node, ...props }) => <h1 style={{ fontSize: "1.35em" }} className="font-bold mt-5 mb-2" {...props} />,
+          h2: ({ node, ...props }) => <h2 style={{ fontSize: "1.2em" }} className="font-bold mt-5 mb-1.5" {...props} />,
+          h3: ({ node, ...props }) => <h3 style={{ fontSize: "1.05em" }} className="font-semibold mt-4 mb-1" {...props} />,
+          p: ({ node, ...props }) => <p className="leading-[1.75] my-0.5" {...props} />,
+          ul: ({ node, ...props }) => <ul className="ml-5 list-disc leading-relaxed my-0.5" {...props} />,
+          ol: ({ node, ...props }) => <ol className="ml-5 list-decimal leading-relaxed my-0.5" {...props} />,
+          li: ({ node, ...props }) => <li className="my-0.5" {...props} />,
+          strong: ({ node, ...props }) => <strong className="font-semibold" {...props} />,
+          em: ({ node, ...props }) => <em className="italic" {...props} />,
+        }}
+      >
+        {normalizeLatexDelimiters(text)}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
 function TypingDots({ isDark }) {
+  const dotColor = isDark ? "bg-[#71717a]" : "bg-[#94a3b8]";
   return (
-    <div className="flex gap-1.5 items-center py-1">
+    <div className="flex items-center gap-1 py-2">
       {[0, 1, 2].map((i) => (
-        <motion.span key={i}
-          className={`w-1.5 h-1.5 rounded-full inline-block ${isDark ? "bg-slate-400" : "bg-slate-500"}`}
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2, ease: "easeInOut" }}
+        <motion.span
+          key={i}
+          className={`w-1.5 h-1.5 rounded-full ${dotColor}`}
+          animate={{ y: [0, -4, 0] }}
+          transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15, ease: "easeInOut" }}
         />
       ))}
     </div>
@@ -440,7 +478,7 @@ const ChatMessage = memo(function ChatMessage({
     return (
       <div className="flex justify-end">
         <div className={`leading-relaxed px-4 py-2.5 rounded-2xl max-w-[82%] ${userBg} ${userTxt}`}>
-          {msg.content}
+          <InlineText text={msg.content} />
         </div>
       </div>
     );
@@ -472,6 +510,53 @@ let cachedCustomModels = [];
 function SettingsModal({ settings, onSave, onClose, isDark }) {
   const [loc, setLoc] = useState({ ...settings });
   const set = (k, v) => setLoc((p) => ({ ...p, [k]: v }));
+
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+
+  const handleCheckUpdates = async () => {
+    setCheckingUpdate(true);
+    try {
+      await checkForAppUpdates(true);
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+  // Проверяем, зажата ли клавиша Ctrl (или Cmd на Mac)
+  const isCtrl = e.ctrlKey || e.metaKey;
+
+  if (isCtrl && (e.key === 'b' || e.key === 'i')) {
+    e.preventDefault(); // Предотвращаем стандартное поведение браузера
+
+    const textarea = e.target;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+
+    // Определяем символ-обертку: ** для жирного, * для курсива
+    const wrapper = e.key === 'b' ? '**' : '*';
+    const selectedText = text.substring(start, end);
+
+    // Вставляем обертку вокруг выделенного текста (или просто вставляем пару символов, если ничего не выделено)
+    const newText = text.substring(0, start) + wrapper + selectedText + wrapper + text.substring(end);
+    
+    // Обновляем значение через ваш стейт (например, setMessage)
+    setMessage(newText);
+
+    // Возвращаем курсор в удобное место (внутрь обертки или после нее)
+    setTimeout(() => {
+      textarea.focus();
+      if (selectedText.length === 0) {
+        // Если ничего не было выделено, ставим курсор между звездочками
+        textarea.setSelectionRange(start + wrapper.length, start + wrapper.length);
+      } else {
+        // Если текст был выделен, оставляем его выделенным внутри звездочек
+        textarea.setSelectionRange(start, end + wrapper.length * 2);
+      }
+    }, 0);
+  }
+};
 
   const [ollamaModels, setOllamaModels] = useState(cachedOllamaModels);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -669,7 +754,7 @@ const initialMount = useRef(true);
                         placeholder="http://localhost:11434"
                         className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
                       <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
-                      {t("ollama_url_hint", settings.language)}
+                      {t("ollama_url_hint", loc.language)}
                     </p>
                     </div>
 
@@ -681,7 +766,7 @@ const initialMount = useRef(true);
                           title="Refresh models"
                           className={`flex items-center gap-1 text-[10px] ${muted} hover:text-current transition-colors`}>
                           <RotateCw size={10} className={loadingModels ? "animate-spin" : ""} />
-                          <span>{t("refresh_models", settings.language)}</span>
+                          <span>{t("refresh_models", loc.language)}</span>
                         </button>
                       </div>
                       {ollamaModels.length > 0 ? (
@@ -957,13 +1042,13 @@ const initialMount = useRef(true);
           {/* ─── Автообновления (тумблер как у маскота, в самом низу справа) ─── */}
           <div className={`flex items-center justify-between pt-3 pb-3 border-t ${brd}`}>
             <div>
-              <p className="text-xs font-medium">{t("disable_auto_updates", loc.language)}</p>
-              <p className={`text-[10px] ${muted} mt-0.5`}>{t("disable_auto_updates_hint", loc.language)}</p>
+              <p className="text-xs font-medium">{t("enable_auto_updates", loc.language)}</p>
+              <p className={`text-[10px] ${muted} mt-0.5`}>{t("enable_auto_updates_hint", loc.language)}</p>
             </div>
             <button
-              onClick={() => set("disableAutoUpdates", !loc.disableAutoUpdates)}
+              onClick={() => set("enableAutoUpdates", !loc.enableAutoUpdates)}
               className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${
-                loc.disableAutoUpdates
+                loc.enableAutoUpdates
                   ? (isDark ? "bg-slate-200" : "bg-slate-900")
                   : (isDark ? "bg-[#272a31]" : "bg-[#cbd5e1]")
               }`}>
@@ -971,20 +1056,26 @@ const initialMount = useRef(true);
                 layout
                 transition={{ type: "spring", stiffness: 500, damping: 30 }}
                 className={`absolute top-0.5 w-5 h-5 rounded-full ${isDark ? "bg-[#121417]" : "bg-white"}`}
-                style={{ left: loc.disableAutoUpdates ? "18px" : "2px" }}
+                style={{ left: loc.enableAutoUpdates ? "18px" : "2px" }}
               />
             </button>
           </div>
 
           <button
-            onClick={() => checkForAppUpdates(true)} // true — покажет уведомление, если обновлений нет
-            className={`w-full mb-3 py-2.5 px-4 rounded-xl border text-xs font-medium transition-all ${
+            onClick={handleCheckUpdates}
+            disabled={checkingUpdate}
+            className={`w-full mb-3 py-2.5 px-4 rounded-xl border text-xs font-medium transition-all flex items-center justify-center gap-2 ${
               isDark
                 ? "bg-[#1f2228] border-[#2f333c] text-zinc-200 hover:bg-[#272a31]"
                 : "bg-white border-zinc-300 text-zinc-800 hover:bg-zinc-50"
-            }`}
+            } disabled:opacity-50`}
           >
-            {t("check_for_updates", loc.language)}
+            {checkingUpdate && <RotateCw size={12} className="animate-spin" />}
+            <span>
+              {checkingUpdate
+                ? t("checking_for_updates", loc.language)
+                : t("check_for_updates", loc.language)}
+            </span>
           </button>
 
           <button onClick={() => { onSave(loc); onClose(); }}
@@ -1033,8 +1124,8 @@ export default function App() {
   const currentFontFamily = FONTS[settings.font]?.value || FONTS.inter.value;
 
   useEffect(() => {
-    if (!settings.disableAutoUpdates) {
-      checkForAppUpdates(false); // false — чтобы не спамить диалогами, если обновлений нет
+    if (!settings.enableAutoUpdates) {
+      checkForAppUpdates(false);
     }
   }, []);
 
@@ -1387,8 +1478,36 @@ const sendMessage = useCallback(async () => {
   streamResponse(chatId, aId, apiMsgs);
 }, [input, streaming, activeChatId, chats, getSystemPrompt, streamResponse]);
 
+const wrapSelection = (wrapper) => {
+  const textarea = textareaRef.current;
+  if (!textarea) return;
+
+  const { selectionStart: start, selectionEnd: end, value: text } = textarea;
+  const selectedText = text.substring(start, end);
+  const newText = text.slice(0, start) + wrapper + selectedText + wrapper + text.slice(end);
+
+  setInput(newText);
+
+  setTimeout(() => {
+    textarea.focus();
+    textarea.style.height = "auto";
+    textarea.style.height = Math.min(textarea.scrollHeight, 180) + "px";
+    textarea.setSelectionRange(start + wrapper.length, end + wrapper.length);
+  }, 0);
+};
+
 const handleKey = (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+    return;
+  }
+
+  const isCtrl = e.ctrlKey || e.metaKey;
+  if (isCtrl && (e.code === "KeyB" || e.code === "KeyI")) {
+    e.preventDefault();
+    wrapSelection(e.code === "KeyB" ? "**" : "*");
+  }
 };
 
   // ── Theme tokens (Silver light mode & Dark Gray dark mode) ──
@@ -1477,6 +1596,22 @@ const handleKey = (e) => {
 
       {/* ─── Main Canvas ─── */}
       <div className="flex-1 flex flex-col overflow-hidden relative">
+
+{/* Decorative paw print watermark */}
+        <img 
+          src="/Pawprint.png"
+          alt=""
+          aria-hidden="true"
+          className={`absolute pointer-events-none select-none z-0 ${isDark ? "opacity-10" : "opacity-5"}`}
+          style={{
+            width: 950,
+            height: 950,
+            bottom: -24,
+            right: -24,
+            opacity: 0.0,
+            transform: "rotate(-45deg)",
+          }}
+        />
 
         {/* Sidebar Toggle Button */}
         <button
@@ -1599,38 +1734,35 @@ const handleKey = (e) => {
 
 /* Update Function */
 
-import { check } from "@tauri-apps/plugin-updater";
-import { ask, message } from "@tauri-apps/plugin-dialog";
-import { relaunch } from "@tauri-apps/plugin-process";
-
 async function checkForAppUpdates(manualCheck = false) {
   try {
-    const update = await check();
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Timeout")), 8000)
+    );
+
+    const update = await Promise.race([check(), timeout]);
     
     if (update) {
-      console.log(`Найдена новая версия: ${update.version}`);
-      
-      // Спрашиваем пользователя, хочет ли он обновиться
       const confirmed = await ask(
-        `Доступна новая версия приложения (${update.version}). Хотите обновить его сейчас?`,
-        { title: "Обновление приложения", kind: "info" }
+        `A newer version of Cloudstale has arrived: (${update.version}). Would you like to install it right now?`,
+        { title: "Cloudstale Update", kind: "info" }
       );
 
       if (confirmed) {
         await update.downloadAndInstall();
-        await relaunch(); // Перезапуск приложения после установки
+        await relaunch();
       }
     } else if (manualCheck) {
-      await message("У вас установлена самая свежая версия приложения.", {
-        title: "Обновлений нет",
+      await message("The latest version is installed.", {
+        title: "No updates available",
         kind: "info",
       });
     }
   } catch (error) {
-    console.error("Ошибка при проверке обновлений:", error);
+    console.error("Failed to check for updates:", error);
     if (manualCheck) {
-      await message("Не удалось проверить наличие обновлений. Проверьте подключение к сети.", {
-        title: "Ошибка",
+      await message("Failed to check for updates. Please check your connection.", {
+        title: "Error",
         kind: "error",
       });
     }

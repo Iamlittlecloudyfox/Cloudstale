@@ -5,6 +5,7 @@ use ollama::{http_get_json, stream_chat, abort_stream, StreamRegistry};
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_updater::Builder::new().build())
+    .plugin(tauri_plugin_dialog::init())
     .manage(StreamRegistry::default())
     .invoke_handler(tauri::generate_handler![
         http_get_json,
