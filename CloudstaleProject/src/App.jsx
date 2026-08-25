@@ -84,6 +84,180 @@ const PERSONAS = {
 
 const MASCOT_PERSONA_PROMPT = "You a friendly and curious anthro fox who lives in this chat as its mascot. Let a bit of that personality come through in how you write — warm, a little playful and whimsical, quick with a gentle touch of humor — without ever getting in the way of giving a complete, accurate, and genuinely useful answer. Stay in character subtly; don't make a big deal out of being a fox unless the user brings it up first.";
 
+// ─── i18n (Локализация) ───────────────────────────────────────────────────────
+const LANGUAGES = [
+  { id: "en", label: "English" },
+  { id: "ru", label: "Русский" },
+  { id: "de", label: "Deutsch" },
+];
+
+const TRANSLATIONS = {
+  en: {
+    // Sidebar & Main
+    new_chat: "New Chat",
+    toggle_theme: "Toggle Theme",
+    settings: "Settings",
+    message_placeholder: "Message…",
+    click_to_change_greeting: "Click to change greeting",
+
+    // Settings Modal
+    persona_studying: "Studying",
+    persona_dreaming: "Dreaming",
+    persona_custom: "Custom",
+    modal_settings: "Settings",
+    save: "Save",
+    api_provider: "API Provider",
+    ollama_local: "Ollama (Local)",
+    custom_api: "Custom API",
+    ollama_url: "Ollama URL",
+    ollama_url_hint: "If running on a phone while Ollama runs on your computer, use your computer's local IP instead of localhost, e.g. http://192.168.1.10:11434",
+    model: "Model",
+    refresh_models: "Refresh",
+    model_name_placeholder: "llama3, mistral, deepseek-r1…",
+    model_display_name: "Name for the model",
+    model_display_name_placeholder_ollama: "e.g. Assistant, Fox, Llama…",
+    model_display_name_placeholder_custom: "e.g. Assistant, Fox, AI…",
+    endpoint_url: "Endpoint URL",
+    cors_warning: "Some AI providers may block the direct API connection (CORS policy). If your request returns a network error, it may be the connection being blocked by the AI provider.",
+    api_key: "API Key",
+    api_key_placeholder: "API Key",
+    api_key_hint: "Your key is stored only in this browser and sent directly to the selected provider — we never see it or store it anywhere.",
+    fetch_models: "Fetch models",
+    custom_model_placeholder: "gpt-4o, claude-3-5-sonnet, mistral…",
+    max_response_length: "Max Response Length",
+    max_response_length_hint: "Upper limit on how long a single response can be (the model's max_tokens parameter). Lower values respond faster and use less quota; higher values allow longer answers.",
+    your_name: "Your Name",
+    your_name_placeholder: "Name you want the model to call you",
+    font: "Font",
+    text_size: "Text Size",
+    show_mascot: "Show Mascot",
+    hide_cloudy: "Hide Cloudy from chat",
+    mascot_preferences: "Add Mascot Preferences",
+    mascot_preferences_hint: "Let Cloudy's personality color every response, even with a custom prompt",
+    system_prompt: "System prompt",
+    custom_prompt_placeholder: "Type custom system prompt for the model…",
+    language: "Language",
+    disable_auto_updates: "Disable automatic updates",
+    disable_auto_updates_hint: "Don't check for or install updates automatically on startup",
+    check_for_updates: "Check for app updates",
+
+    // Chat Actions
+    retry: "Retry",
+    regenerate: "Regenerate",
+    regenerate_tooltip: "Regenerate full response",
+  },
+  ru: {
+    // Sidebar & Main
+    new_chat: "Новый чат",
+    toggle_theme: "Сменить тему",
+    settings: "Настройки",
+    message_placeholder: "Сообщение…",
+    click_to_change_greeting: "Нажмите, чтобы изменить приветствие",
+
+    // Settings Modal
+    persona_studying: "Учеба",
+    persona_dreaming: "Грёзы",
+    persona_custom: "Свой",
+    modal_settings: "Настройки",
+    save: "Сохранить",
+    api_provider: "Провайдер API",
+    ollama_local: "Ollama (Локально)",
+    custom_api: "Свой API",
+    ollama_url: "Адрес Ollama (Url)",
+    ollama_url_hint: "Если вы зашли с телефона, а Ollama запущена на компьютере, используйте локальный IP компьютера вместо localhost, например http://192.168.1.10:11434",
+    model: "Модель",
+    refresh_models: "Обновить",
+    model_name_placeholder: "llama3, mistral, deepseek-r1…",
+    model_display_name: "Имя для модели",
+    model_display_name_placeholder_custom: "Например, Ассистент, Лиса, ИИ…",
+    endpoint_url: "URL эндпоинта",
+    cors_warning: "Некоторые провайдеры могут блокировать прямые API-соединения (политика CORS). Ошибка сети может означать блокировку со стороны ИИ-провайдера.",
+    api_key: "API-ключ",
+    api_key_placeholder: "API-ключ",
+    api_key_hint: "Ваш ключ хранится только в вашем браузере и отправляется напрямую провайдеру — мы его не видим и нигде не сохраняем.",
+    fetch_models: "Получить модели",
+    custom_model_placeholder: "gpt-4o, claude-3-5-sonnet, mistral…",
+    max_response_length: "Максимальная длина ответа",
+    max_response_length_hint: "Верхний лимит длины одного ответа (параметр max_tokens). Меньшие значения работают быстрее и экономят квоту, большие — разрешают длинные ответы.",
+    your_name: "Ваше имя",
+    your_name_placeholder: "Имя, которым модель будет называть вас",
+    font: "Шрифт",
+    text_size: "Размер текста",
+    show_mascot: "Показывать маскота",
+    hide_cloudy: "Спрятать Клауди из чата",
+    mascot_preferences: "Характер маскота",
+    mascot_preferences_hint: "Добавлять индивидуальность Клауди в каждый ответ, даже при кастомном промпте",
+    system_prompt: "Системный промпт",
+    custom_prompt_placeholder: "Введите кастомный системный промпт для модели…",
+    language: "Язык интерфейса",
+    disable_auto_updates: "Отключить автообновления",
+    disable_auto_updates_hint: "Не проверять и не устанавливать обновления автоматически при запуске",
+    check_for_updates: "Проверить обновление приложения",
+
+    // Chat Actions
+    retry: "Повторить",
+    regenerate: "Пересоздать",
+    regenerate_tooltip: "Перегенерировать полный ответ",
+  },
+  de: {
+    // Sidebar & Main
+    new_chat: "Neuer Chat",
+    toggle_theme: "Thema wechseln",
+    settings: "Einstellungen",
+    message_placeholder: "Nachricht…",
+    click_to_change_greeting: "Klicken, um die Begrüßung zu ändern",
+
+    // Settings Modal
+    persona_studying: "Lernen",
+    persona_dreaming: "Träumen",
+    persona_custom: "Benutzerdefiniert",
+    modal_settings: "Einstellungen",
+    save: "Speichern",
+    api_provider: "API-Anbieter",
+    ollama_local: "Ollama (Lokal)",
+    custom_api: "Eigene API",
+    ollama_url: "Ollama-URL",
+    ollama_url_hint: "Wenn du die App auf dem Handy nutzt und Ollama auf dem PC läuft, verwende die lokale IP des PCs statt localhost, z. B. http://192.168.1.10:11434",
+    model: "Modell",
+    refresh_models: "Aktualisieren",
+    model_name_placeholder: "llama3, mistral, deepseek-r1…",
+    model_display_name: "Name für das Modell",
+    model_display_name_placeholder_ollama: "z. B. Assistent, Fuchs, Llama…",
+    model_display_name_placeholder_custom: "z. B. Assistent, Fuchs, KI…",
+    endpoint_url: "Endpunkt-URL",
+    cors_warning: "Einige KI-Anbieter blockieren möglicherweise direkte API-Verbindungen (CORS-Richtlinie). Ein Netzwerkfehler kann darauf zurückzuführen sein.",
+    api_key: "API-Schlüssel",
+    api_key_placeholder: "API-Schlüssel",
+    api_key_hint: "Ihr Schlüssel wird nur in diesem Browser gespeichert und direkt an den Anbieter gesendet — wir sehen ihn niemals.",
+    fetch_models: "Modelle laden",
+    custom_model_placeholder: "gpt-4o, claude-3-5-sonnet, mistral…",
+    max_response_length: "Maximale Antwortlänge",
+    max_response_length_hint: "Obergrenze für die Länge einer einzelnen Antwort (max_tokens).",
+    your_name: "Ihr Name",
+    your_name_placeholder: "Name, mit dem das Modell Sie ansprechen soll",
+    font: "Schriftart",
+    text_size: "Textgröße",
+    show_mascot: "Maskottchen anzeigen",
+    hide_cloudy: "Cloudy aus dem Chat ausblenden",
+    mascot_preferences: "Maskottchen-Persönlichkeit",
+    mascot_preferences_hint: "Cloudys Persönlichkeit in jede Antwort einfließen lassen",
+    system_prompt: "System-Prompt",
+    custom_prompt_placeholder: "Benutzerdefinierten System-Prompt eingeben…",
+    language: "Sprache",
+    disable_auto_updates: "Automatische Updates deaktivieren",
+    disable_auto_updates_hint: "Beim Start nicht automatisch nach Updates suchen und diese installieren",
+    check_for_updates: "Nach App-Updates suchen",
+
+    // Chat Actions
+    retry: "Wiederholen",
+    regenerate: "Neu generieren",
+    regenerate_tooltip: "Vollständige Antwort neu generieren",
+  }
+};
+
+const t = (key, lang = "en") => TRANSLATIONS[lang]?.[key] || TRANSLATIONS["en"]?.[key] || key;
+
+
 const DEFAULT_SETTINGS = {
   provider: "ollama",
   ollamaUrl: "http://localhost:11434",
@@ -100,6 +274,8 @@ const DEFAULT_SETTINGS = {
   fontSize: 14,
   mascotPersonaEnabled: true,
   maxTokens: 4096,
+  language: "en",
+  disableAutoUpdates: false,
 };
 
 const ls = {
@@ -291,11 +467,13 @@ const ChatMessage = memo(function ChatMessage({
 
 // ─── Settings Modal ───────────────────────────────────────────────────────────
 
+let cachedOllamaModels = [];
+let cachedCustomModels = [];
 function SettingsModal({ settings, onSave, onClose, isDark }) {
   const [loc, setLoc] = useState({ ...settings });
   const set = (k, v) => setLoc((p) => ({ ...p, [k]: v }));
 
-  const [ollamaModels, setOllamaModels] = useState([]);
+  const [ollamaModels, setOllamaModels] = useState(cachedOllamaModels);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelError, setModelError] = useState(null);
   const fetchingRef = useRef(false);
@@ -314,68 +492,69 @@ function SettingsModal({ settings, onSave, onClose, isDark }) {
     ? "bg-slate-200 text-slate-950 font-semibold hover:bg-white active:bg-slate-300"
     : "bg-slate-900 text-white font-semibold hover:bg-slate-800 active:bg-slate-950";
 
-  const [customModels, setCustomModels] = useState([]);
-const [loadingCustomModels, setLoadingCustomModels] = useState(false);
-const [customModelError, setCustomModelError] = useState(null);
-const customFetchingRef = useRef(false);
+  const [customModels, setCustomModels] = useState(cachedCustomModels);
+  const [loadingCustomModels, setLoadingCustomModels] = useState(false);
+  const [customModelError, setCustomModelError] = useState(null);
+  const customFetchingRef = useRef(false);
 
-const deriveModelsUrl = (chatUrl) => {
-  try {
+  const deriveModelsUrl = (chatUrl) => {
+    try {
+      const style = detectApiStyle(chatUrl);
+      const url = new URL(normalizeChatUrl(chatUrl, style));
+      const segments = url.pathname.split("/").filter(Boolean);
+
+      if (style === "anthropic") {
+        segments[segments.length - 1] = "models"; // .../v1/messages → .../v1/models
+      } else {
+        if (segments[segments.length - 1] === "completions") segments.pop();
+        if (segments[segments.length - 1] === "responses") segments.pop();
+        if (segments[segments.length - 1] === "chat") segments.pop();
+        segments.push("models");
+      }
+      url.pathname = "/" + segments.join("/");
+      return url.toString();
+    } catch {
+      return null;
+    }
+  };
+
+  const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
+    if (!chatUrl || customFetchingRef.current) return;
     const style = detectApiStyle(chatUrl);
-    const url = new URL(normalizeChatUrl(chatUrl, style));
-    const segments = url.pathname.split("/").filter(Boolean);
+    const modelsUrl = deriveModelsUrl(chatUrl);
+    if (!modelsUrl) return;
 
-    if (style === "anthropic") {
-      segments[segments.length - 1] = "models"; // .../v1/messages → .../v1/models
-    } else {
-      if (segments[segments.length - 1] === "completions") segments.pop();
-      if (segments[segments.length - 1] === "responses") segments.pop();
-      if (segments[segments.length - 1] === "chat") segments.pop();
-      segments.push("models");
+    customFetchingRef.current = true;
+    setLoadingCustomModels(true);
+    setCustomModelError(null);
+    try {
+      const headers = style === "anthropic"
+        ? (apiKey ? { "x-api-key": apiKey, "anthropic-version": "2023-06-01" } : {})
+        : (apiKey ? { Authorization: `Bearer ${apiKey}` } : {});
+
+      const text = await invoke("http_get_json", { url: modelsUrl, headers });
+      const data = JSON.parse(text);
+      const list = (data.data || data.models || []).map((m) => m.id || m.name).filter(Boolean);
+
+      if (list.length > 0) {
+        cachedCustomModels = list;
+        setCustomModels(list);
+        setLoc((prev) => {
+          if (!prev.modelName || !list.includes(prev.modelName)) {
+            return { ...prev, modelName: list[0] };
+          }
+          return prev;
+        });
+      } else {
+        setCustomModelError("No models returned by this endpoint");
+      }
+    } catch (err) {
+      setCustomModelError(`Error: ${err}`);
+    } finally {
+      setLoadingCustomModels(false);
+      customFetchingRef.current = false;
     }
-    url.pathname = "/" + segments.join("/");
-    return url.toString();
-  } catch {
-    return null;
-  }
-};
-
-const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
-  if (!chatUrl || customFetchingRef.current) return;
-  const style = detectApiStyle(chatUrl);
-  const modelsUrl = deriveModelsUrl(chatUrl);
-  if (!modelsUrl) return;
-
-  customFetchingRef.current = true;
-  setLoadingCustomModels(true);
-  setCustomModelError(null);
-  try {
-    const headers = style === "anthropic"
-      ? (apiKey ? { "x-api-key": apiKey, "anthropic-version": "2023-06-01" } : {})
-      : (apiKey ? { Authorization: `Bearer ${apiKey}` } : {});
-
-    const text = await invoke("http_get_json", { url: modelsUrl, headers });
-    const data = JSON.parse(text);
-    const list = (data.data || data.models || []).map((m) => m.id || m.name).filter(Boolean);
-
-    if (list.length > 0) {
-      setCustomModels(list);
-      setLoc((prev) => {
-        if (!prev.modelName || !list.includes(prev.modelName)) {
-          return { ...prev, modelName: list[0] };
-        }
-        return prev;
-      });
-    } else {
-      setCustomModelError("No models returned by this endpoint");
-    }
-  } catch (err) {
-    setCustomModelError(`Error: ${err}`);
-  } finally {
-    setLoadingCustomModels(false);
-    customFetchingRef.current = false;
-  }
-}, []);
+  }, []);
 
   const fetchOllamaModels = useCallback(async (url) => {
   if (!url || fetchingRef.current) return;
@@ -388,6 +567,7 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
     const data = JSON.parse(text);
     const list = (data.models || []).map((m) => m.name);
     if (list.length > 0) {
+      cachedOllamaModels = list;
       setOllamaModels(list);
       setLoc((prev) => {
         if (!prev.modelName || !list.includes(prev.modelName)) {
@@ -406,6 +586,42 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
   }
 }, []);
 
+const initialMount = useRef(true);
+
+  useEffect(() => {
+    const provider = loc.provider;
+    const delay = initialMount.current ? 0 : 400;
+
+    if (provider === "ollama") {
+      if (!loc.ollamaUrl?.trim()) return;
+
+      const timer = setTimeout(() => {
+        fetchOllamaModels(loc.ollamaUrl);
+        initialMount.current = false;
+      }, delay);
+
+      return () => clearTimeout(timer);
+    }
+
+    if (provider === "custom") {
+      if (!loc.customApiUrl?.trim()) return;
+
+      const timer = setTimeout(() => {
+        fetchCustomModels(loc.customApiUrl, loc.customApiKey);
+        initialMount.current = false;
+      }, delay);
+
+      return () => clearTimeout(timer);
+    }
+  }, [
+    loc.provider,
+    loc.ollamaUrl,
+    loc.customApiUrl,
+    loc.customApiKey,
+    fetchOllamaModels,
+    fetchCustomModels,
+  ]);
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -421,7 +637,7 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
         }}>
 
         <div className={`flex items-center justify-between px-5 py-3.5 border-b ${brd}`}>
-          <h2 className="font-semibold text-sm">Settings</h2>
+          <h2 className="font-semibold text-sm">{t("settings", loc.language)}</h2>
           <button onClick={onClose} className={`p-1.5 rounded-lg ${hov} transition-colors`}><X size={15} /></button>
         </div>
 
@@ -432,36 +648,40 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
             <div className="space-y-3">
               {/* Provider */}
               <div>
-                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5 mt-0`}>API Provider</p>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5 mt-0`}>{t("api_provider", loc.language)}</p>
                 <div className={`grid grid-cols-2 gap-1.5 p-1 rounded-xl mb-2.5 ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
-                  {[{ v: "ollama", l: "Ollama (Local)" }, { v: "custom", l: "Custom API" }].map(({ v, l }) => (
+                  {[
+                { v: "ollama", l: t("ollama_local", loc.language) },
+                { v: "custom", l: t("custom_api", loc.language) }
+                  ].map(({ v, l }) => (
                     <button key={v} onClick={() => set("provider", v)}
-                      className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.provider === v)}`}>{l}</button>
+                      className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.provider === v)}`}>
+                      {l}
+                    </button>
                   ))}
                 </div>
 
                 {loc.provider === "ollama" && (
                   <div className="space-y-2.5">
                     <div>
-                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1 mt-0`}>Ollama URL</p>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1 mt-0`}>{t("ollama_url", loc.language)}</p>
                       <input value={loc.ollamaUrl} onChange={(e) => set("ollamaUrl", e.target.value)}
                         placeholder="http://localhost:11434"
                         className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
                       <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
-                      If running on a phone while Ollama runs on your computer, use your computer's local IP
-                      instead of localhost, e.g. http://192.168.1.10:11434
+                      {t("ollama_url_hint", settings.language)}
                     </p>
                     </div>
 
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Model</p>
+                        <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>{t("model", loc.language)}</p>
                         <button onClick={() => fetchOllamaModels(loc.ollamaUrl)}
                           disabled={loadingModels}
                           title="Refresh models"
                           className={`flex items-center gap-1 text-[10px] ${muted} hover:text-current transition-colors`}>
                           <RotateCw size={10} className={loadingModels ? "animate-spin" : ""} />
-                          <span>Refresh</span>
+                          <span>{t("refresh_models", settings.language)}</span>
                         </button>
                       </div>
                       {ollamaModels.length > 0 ? (
@@ -478,7 +698,7 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
                       ) : (
                         <div>
                           <input value={loc.modelName} onChange={(e) => set("modelName", e.target.value)}
-                            placeholder="llama3, mistral, deepseek-r1…"
+                            placeholder={t("model_name_placeholder", loc.language)}
                             className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
                           {modelError && (
                             <p className="text-[10px] text-amber-500 mt-1">{modelError}</p>
@@ -487,9 +707,9 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
                       )}
                     </div>
                     <div>
-                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Name for the model</p>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>{t("model_display_name", loc.language)}</p>
                       <input value={loc.modelDisplayName ?? ""} onChange={(e) => set("modelDisplayName", e.target.value)}
-                        placeholder="e.g. Assistant, Fox, Llama…"
+                        placeholder={t("model_display_name_placeholder_custom", loc.language)}
                         className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
                     </div>
                   </div>
@@ -498,34 +718,32 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
                 {loc.provider === "custom" && (
                   <div className="space-y-2.5">
                     <div>
-                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Endpoint URL</p>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>{t("endpoint_url", loc.language)}</p>
                       <input value={loc.customApiUrl} onChange={(e) => set("customApiUrl", e.target.value)}
                         placeholder="https://api.openai.com/v1/chat/completions"
                         className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
                               <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
-                              Some AI providers may block the direct API connection (CORS policy).
-                              If your request returns a network error, it may be the connection being blocked by the AI provider.
+                              {t("cors_warning", loc.language)}
                             </p>
                     </div>
                     <div>
-                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>API Key</p>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>{t("api_key", loc.language)}</p>
                       <input value={loc.customApiKey} onChange={(e) => set("customApiKey", e.target.value)}
-                        placeholder="API Key" type="password"
+                        placeholder={t("api_key", loc.language)} type="password"
                         className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
                         <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
-                        Your key is stored only in this browser and sent directly to the selected provider —
-                        we never see it or store it anywhere.
+                        {t("api_key_hint", loc.language)}
                       </p>
                     </div>
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Model Name</p>
+                        <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>{t("model", loc.language)}</p>
                         <button onClick={() => fetchCustomModels(loc.customApiUrl, loc.customApiKey)}
                           disabled={loadingCustomModels || !loc.customApiUrl}
                           title="Try to fetch model list"
                           className={`flex items-center gap-1 text-[10px] ${muted} hover:text-current transition-colors disabled:opacity-40`}>
                           <RotateCw size={10} className={loadingCustomModels ? "animate-spin" : ""} />
-                          <span>Fetch models</span>
+                          <span>{t("refresh_models", loc.language)}</span>
                         </button>
                       </div>
                       {customModels.length > 0 ? (
@@ -551,9 +769,9 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
                       )}
                     </div>
                     <div>
-                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Name for the model</p>
+                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>{t("model_display_name", loc.language)}</p>
                       <input value={loc.modelDisplayName ?? ""} onChange={(e) => set("modelDisplayName", e.target.value)}
-                        placeholder="e.g. Assistant, Fox, AI…"
+                        placeholder={t("model_display_name_placeholder_custom", loc.language)}
                         className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
                     </div>
                   </div>
@@ -563,7 +781,7 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
               {/* Max Response Length */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Max Response Length</p>
+                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>{t("max_response_length", loc.language)}</p>
                   <span className={`text-[10px] font-mono ${muted}`}>{loc.maxTokens.toLocaleString()} tokens</span>
                 </div>
                 <input
@@ -581,7 +799,7 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
                   }}
                 />
                 <p className={`text-[10px] ${muted} mt-1.5 leading-relaxed`}>
-                  Upper limit on how long a single response can be (the model's max_tokens parameter). Lower values respond faster and use less quota; higher values allow longer answers.
+                  {t("max_response_length_hint", loc.language)}
                 </p>
               </div>
             </div>
@@ -590,15 +808,15 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
             <div className="space-y-3">
               {/* User Name */}
               <div>
-                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>Your Name</p>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>{t("your_name", loc.language)}</p>
                 <input value={loc.userName} onChange={(e) => set("userName", e.target.value)}
-                  placeholder="Name you want the model to call you"
+                  placeholder={t("your_name_placeholder", loc.language)}
                   className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
               </div>
 
               {/* Font Selection */}
               <div>
-                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>Font</p>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>{t("font", loc.language)}</p>
                 <div className={`grid grid-cols-3 gap-1.5 p-1 rounded-xl ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
                   {Object.entries(FONTS).map(([key, f]) => (
                     <button key={key} onClick={() => set("font", key)}
@@ -613,7 +831,7 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
               {/* Text Size */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>Text Size</p>
+                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>{t("text_size", loc.language)}</p>
                   <span className={`text-[10px] font-mono ${muted}`}>{loc.fontSize}px</span>
                 </div>
                 <input
@@ -636,8 +854,8 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
               <div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium">Show Mascot</p>
-                    <p className={`text-[10px] ${muted} mt-0.5`}>Hide Cloudy from chat</p>
+                    <p className="text-xs font-medium">{t("show_mascot", loc.language)}</p>
+                    <p className={`text-[10px] ${muted} mt-0.5`}>{t("hide_cloudy", loc.language)}</p>
                   </div>
                   <button
                     onClick={() => set("showMascot", !loc.showMascot)}
@@ -664,8 +882,8 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
                       className="overflow-hidden">
                       <div className="flex items-center justify-between pt-3">
                         <div>
-                          <p className="text-xs font-medium">Add Mascot Preferences</p>
-                          <p className={`text-[10px] ${muted} mt-0.5`}>Let Cloudy's personality color every response, even with a custom prompt</p>
+                          <p className="text-xs font-medium">{t("mascot_preferences", loc.language)}</p>
+                          <p className={`text-[10px] ${muted} mt-0.5`}>{t("mascot_preferences_hint", loc.language)}</p>
                         </div>
                         <button
                           onClick={() => set("mascotPersonaEnabled", !loc.mascotPersonaEnabled)}
@@ -689,36 +907,89 @@ const fetchCustomModels = useCallback(async (chatUrl, apiKey) => {
 
               {/* System Prompt Category */}
               <div className="pt-1">
-                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>System prompt</p>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>{t("system_prompt", loc.language)}</p>
                 <div className={`grid grid-cols-3 gap-1.5 p-1 rounded-xl mb-2 ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
-                  {["Studying", "Dreaming", "Custom"].map((key) => (
+                  {[
+                    { key: "Studying", label: t("persona_studying", loc.language) },
+                    { key: "Dreaming", label: t("persona_dreaming", loc.language) },
+                    { key: "Custom", label: t("persona_custom", loc.language) },
+                  ].map(({ key, label }) => (
                     <button key={key} onClick={() => set("persona", key)}
                       className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.persona === key)}`}>
-                      {key}
+                      {label}
                     </button>
                   ))}
                 </div>
+
+                
 
                 <AnimatePresence>
                   {loc.persona === "Custom" && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
                       <textarea value={loc.customPrompt} onChange={(e) => set("customPrompt", e.target.value)}
-                        placeholder="Type custom system prompt for the model…"
+                        placeholder={t("custom_prompt_placeholder", loc.language)}
                         className={`w-full rounded-xl border px-3 py-2 text-xs resize-none ${inp} focus:outline-none focus:border-slate-400 transition-colors`}
                         rows={4} />
                     </motion.div>
                   )}
                 </AnimatePresence>
               </div>
+              {/* ─── Выбор языка ─── */}
+              <div className={`pt-3 mt-3 border-t ${isDark ? "border-[#272a31]" : "border-[#cbd5e1]"}`}>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>
+                  {t("language", loc.language)}
+                </p>
+                <div className={`grid grid-cols-3 gap-1.5 p-1 rounded-xl ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
+                  {LANGUAGES.map((l) => (
+                    <button key={l.id} onClick={() => set("language", l.id)}
+                      className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.language === l.id)}`}>
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-
+            
           </div>
         </div>
 
         <div className="px-5 pb-5">
+          {/* ─── Автообновления (тумблер как у маскота, в самом низу справа) ─── */}
+          <div className={`flex items-center justify-between pt-3 pb-3 border-t ${brd}`}>
+            <div>
+              <p className="text-xs font-medium">{t("disable_auto_updates", loc.language)}</p>
+              <p className={`text-[10px] ${muted} mt-0.5`}>{t("disable_auto_updates_hint", loc.language)}</p>
+            </div>
+            <button
+              onClick={() => set("disableAutoUpdates", !loc.disableAutoUpdates)}
+              className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${
+                loc.disableAutoUpdates
+                  ? (isDark ? "bg-slate-200" : "bg-slate-900")
+                  : (isDark ? "bg-[#272a31]" : "bg-[#cbd5e1]")
+              }`}>
+              <motion.span
+                layout
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                className={`absolute top-0.5 w-5 h-5 rounded-full ${isDark ? "bg-[#121417]" : "bg-white"}`}
+                style={{ left: loc.disableAutoUpdates ? "18px" : "2px" }}
+              />
+            </button>
+          </div>
+
+          <button
+            onClick={() => checkForAppUpdates(true)} // true — покажет уведомление, если обновлений нет
+            className={`w-full mb-3 py-2.5 px-4 rounded-xl border text-xs font-medium transition-all ${
+              isDark
+                ? "bg-[#1f2228] border-[#2f333c] text-zinc-200 hover:bg-[#272a31]"
+                : "bg-white border-zinc-300 text-zinc-800 hover:bg-zinc-50"
+            }`}
+          >
+            {t("check_for_updates", loc.language)}
+          </button>
+
           <button onClick={() => { onSave(loc); onClose(); }}
             className={`w-full py-2.5 rounded-xl text-xs transition-colors ${buttonPrimary}`}>
-            Save
+            {t("save", loc.language)}
           </button>
         </div>
       </motion.div>
@@ -748,6 +1019,9 @@ export default function App() {
   const [editVal, setEditVal] = useState("");
   const [greetingIndex, setGreetingIndex] = useState(() => Math.floor(Math.random() * GREETING_TEMPLATES.length));
   const endRef = useRef(null);
+  const scrollContainerRef = useRef(null);
+  const isAutoScrollEnabled = useRef(true);
+  const forceScrollRef = useRef(false);
   const inputRef = useRef(null);
   const currentRequestIdRef = useRef(null);
   const textareaRef = useRef(null);
@@ -757,6 +1031,18 @@ export default function App() {
   const messages = activeChat?.messages ?? [];
   const hasMessages = messages.length > 0;
   const currentFontFamily = FONTS[settings.font]?.value || FONTS.inter.value;
+
+  useEffect(() => {
+    if (!settings.disableAutoUpdates) {
+      checkForAppUpdates(false); // false — чтобы не спамить диалогами, если обновлений нет
+    }
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    if (!scrollContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+    isAutoScrollEnabled.current = scrollHeight - scrollTop - clientHeight < 15;
+  }, []);
 
   useEffect(() => { ls.set("cozy_settings", settings); }, [settings]);
   
@@ -772,9 +1058,17 @@ export default function App() {
     return () => clearTimeout(saveChatsTimer.current);
   }, [chats]);
   
-  useEffect(() => { ls.set("cozy_active_chat", activeChatId); }, [activeChatId]);
+
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "auto" });
+    if (isAutoScrollEnabled.current || forceScrollRef.current) {
+
+      const timer = setTimeout(() => {
+        endRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+        forceScrollRef.current = false;
+      }, 50);
+      
+      return () => clearTimeout(timer);
+    }
   }, [messages]);
   useEffect(() => {
     if (!streaming) {
@@ -1058,7 +1352,8 @@ const handleRegenerate = useCallback((msgId) => {
 const sendMessage = useCallback(async () => {
   const text = input.trim();
   if (!text || streaming) return;
-
+  isAutoScrollEnabled.current = true; 
+    forceScrollRef.current = true;
   let chatId = activeChatId;
   if (!chatId) {
     chatId = uid();
@@ -1126,7 +1421,7 @@ const handleKey = (e) => {
               <button onClick={newChat}
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium ${muted} ${hov} border ${sideBorder} transition-all`}>
                 <Plus size={14} />
-                New Chat
+                {t("new_chat", settings.language)}
               </button>
             </div>
 
@@ -1166,12 +1461,12 @@ const handleKey = (e) => {
             {/* Bottom Controls: Theme Switcher & Settings */}
             <div className={`px-3 py-2.5 border-t ${sideBorder} flex items-center justify-between`}>
               <button onClick={() => setSettings((p) => ({ ...p, theme: p.theme === "dark" ? "light" : "dark" }))}
-                title="Toggle Theme"
+                title={t("toggle_theme", settings.language)}
                 className={`p-2 rounded-lg ${muted} ${hov} transition-all`}>
                 {isDark ? <Sun size={15} /> : <Moon size={15} />}
               </button>
               <button onClick={() => setShowSettings(true)}
-                title="Settings"
+                title={t("settings", settings.language)}
                 className={`p-2 rounded-lg ${muted} ${hov} transition-all`}>
                 <Settings size={15} />
               </button>
@@ -1194,7 +1489,7 @@ const handleKey = (e) => {
         </button>
 
         {/* Message Feed / Minimal Empty State */}
-        <div className="flex-1 overflow-y-auto">
+        <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
           <AnimatePresence mode="wait">
             {!hasMessages ? (
               <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -1216,39 +1511,45 @@ const handleKey = (e) => {
               </motion.div>
             ) : (
               /* ── Active Chat Messages ── */
-              <motion.div key="chat" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                <div className="max-w-2xl mx-auto px-6 pt-12 pb-6 space-y-6">
-                  {messages.map((msg) => (
-                    <motion.div key={msg.id}
-                      initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.15 }}>
-                      <ChatMessage
-                        msg={msg}
-                        isDark={isDark}
-                        fontSize={settings.fontSize}
-                        isStreamingThis={streaming && msg.id === streamingMsgId}
-                        showRegenerate={!streaming}
-                        onRegenerate={handleRegenerate}
-                        userBg={userBg}
-                        userTxt={userTxt}
-                        muted={muted}
-                        hov={hov}
-                      />
-                    </motion.div>
-                  ))}
-                  <div ref={endRef} />
-                </div>
-              </motion.div>
+            <motion.div key="chat" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+              <div className="max-w-2xl mx-auto px-6 pt-12 space-y-6">
+                {messages.map((msg) => (
+                  <motion.div key={msg.id}
+                    initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.15 }}>
+                    <ChatMessage
+                      msg={msg}
+                      isDark={isDark}
+                      fontSize={settings.fontSize}
+                      isStreamingThis={streaming && msg.id === streamingMsgId}
+                      showRegenerate={!streaming}
+                      onRegenerate={handleRegenerate}
+                      userBg={userBg}
+                      userTxt={userTxt}
+                      muted={muted}
+                      hov={hov}
+                    />
+                  </motion.div>
+                ))}
+
+                {/* ── Невидимая распорка: гарантирует, что текст остановится выше маскота ── */}
+                {settings.showMascot ? <div className="h-[220px]" /> : <div className="h-6" />}
+
+                <div ref={endRef} />
+              </div>
+            </motion.div>
             )}
             </AnimatePresence>
         </div>
 
-        {/* Mascot in active chat bottom corner (256px Mascot Size) */}
-        {hasMessages && settings.showMascot && (
-          <div className="absolute bottom-20 right-6 pointer-events-none opacity-80">
-            <FoxMascot state={mascotState} size={256} isDark={isDark} />
-          </div>
-        )}
+          {hasMessages && settings.showMascot && (
+            <div className="absolute bottom-[90px] right-6 lg:right-10 pointer-events-none opacity-90 transition-all duration-300">
+              <FoxMascot state={mascotState} size={275} isDark={isDark} />
+            </div>
+          )}
+
+          {/* ── Input Box (Vertically Centered Single Line with Auto-Expansion) ── */}
+          <div className="px-4 py-3.5 flex-shrink-0"></div>
 
         {/* ── Input Box (Vertically Centered Single Line with Auto-Expansion) ── */}
         <div className="px-4 py-3.5 flex-shrink-0">
@@ -1263,7 +1564,7 @@ const handleKey = (e) => {
               }}
               onKeyDown={handleKey}
               rows={1}
-              placeholder="Message…"
+              placeholder={t("message_placeholder", settings.language)}
               disabled={streaming}
               className={`flex-1 bg-transparent resize-none outline-none py-1.5 leading-5 block ${isDark ? "text-[#f1f5f9] placeholder-[#52525b]" : "text-[#0f172a] placeholder-[#94a3b8]"}`}
               style={{ maxHeight: 180, fontSize: `${settings.fontSize}px` }}
@@ -1290,6 +1591,48 @@ const handleKey = (e) => {
           <SettingsModal settings={settings} onSave={setSettings} onClose={() => setShowSettings(false)} isDark={isDark} />
         )}
       </AnimatePresence>
+
     </div>
+
   );
+}
+
+/* Update Function */
+
+import { check } from "@tauri-apps/plugin-updater";
+import { ask, message } from "@tauri-apps/plugin-dialog";
+import { relaunch } from "@tauri-apps/plugin-process";
+
+async function checkForAppUpdates(manualCheck = false) {
+  try {
+    const update = await check();
+    
+    if (update) {
+      console.log(`Найдена новая версия: ${update.version}`);
+      
+      // Спрашиваем пользователя, хочет ли он обновиться
+      const confirmed = await ask(
+        `Доступна новая версия приложения (${update.version}). Хотите обновить его сейчас?`,
+        { title: "Обновление приложения", kind: "info" }
+      );
+
+      if (confirmed) {
+        await update.downloadAndInstall();
+        await relaunch(); // Перезапуск приложения после установки
+      }
+    } else if (manualCheck) {
+      await message("У вас установлена самая свежая версия приложения.", {
+        title: "Обновлений нет",
+        kind: "info",
+      });
+    }
+  } catch (error) {
+    console.error("Ошибка при проверке обновлений:", error);
+    if (manualCheck) {
+      await message("Не удалось проверить наличие обновлений. Проверьте подключение к сети.", {
+        title: "Ошибка",
+        kind: "error",
+      });
+    }
+  }
 }
