@@ -389,6 +389,7 @@ function FoxMascot({ state = "idle", size = 480, isDark = false }) {
           key={src}
           src={src}
           alt="Mascot"
+          draggable={false}
           style={{
             position: "absolute",
             top: 0,
@@ -399,6 +400,9 @@ function FoxMascot({ state = "idle", size = 480, isDark = false }) {
             opacity: display.img === src ? 1 : 0,
             transition: display.instant ? "none" : "opacity 0.25s linear",
             pointerEvents: "none",
+            userSelect: "none",
+            WebkitUserSelect: "none",
+            WebkitUserDrag: "none",
           }}
         />
       ))}

@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Cloudstale",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "identifier": "com.cloudstale.app",
   "build": {
     "frontendDist": "../dist",
@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "Cloudstale",
-        "width": 1920,
-        "height": 1080,
+        "width": 1280,
+        "height": 720,
         "resizable": true,
-        "fullscreen": true
+        "fullscreen": false
       }
     ],
     "security": {
