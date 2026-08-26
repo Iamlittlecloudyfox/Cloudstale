@@ -1608,7 +1608,7 @@ const handleKey = (e) => {
             height: 950,
             bottom: -24,
             right: -24,
-            opacity: 0.0,
+            opacity: 0.1,
             transform: "rotate(-45deg)",
           }}
         />
