@@ -15,6 +15,13 @@ import "./App.css";
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
+// Tauri's Android WebView doesn't forward WindowInsets to the page, so
+// env(safe-area-inset-top) reliably resolves to 0 even with viewport-fit=cover.
+// We fall back to a fixed approximate status-bar height on Android only;
+// if native inset support is ever wired up, max() will pick the real value instead.
+const isAndroidPlatform = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent);
+const ANDROID_STATUS_BAR_FALLBACK = "28px";
+
 // ─── API style detection & URL normalization ──────────────────────────────
 function detectApiStyle(url) {
   try {
@@ -115,6 +122,9 @@ const TRANSLATIONS = {
     persona_custom: "Custom",
     modal_settings: "Settings",
     save: "Save",
+    tab_ai: "AI",
+    tab_personalization: "Personalization",
+    tab_advanced: "Advanced",
     api_provider: "API Provider",
     ollama_local: "Ollama (Local)",
     custom_api: "Custom API",
@@ -172,6 +182,9 @@ const TRANSLATIONS = {
     persona_custom: "Свой",
     modal_settings: "Настройки",
     save: "Сохранить",
+    tab_ai: "ИИ",
+    tab_personalization: "Персонализация",
+    tab_advanced: "Дополнительно",
     api_provider: "Провайдер API",
     ollama_local: "Ollama (Локально)",
     custom_api: "Свой API",
@@ -228,6 +241,9 @@ const TRANSLATIONS = {
     persona_custom: "Benutzerdefiniert",
     modal_settings: "Einstellungen",
     save: "Speichern",
+    tab_ai: "KI",
+    tab_personalization: "Personalisierung",
+    tab_advanced: "Erweitert",
     api_provider: "API-Anbieter",
     ollama_local: "Ollama (Lokal)",
     custom_api: "Eigene API",
@@ -510,6 +526,7 @@ let cachedCustomModels = [];
 function SettingsModal({ settings, onSave, onClose, isDark }) {
   const [loc, setLoc] = useState({ ...settings });
   const set = (k, v) => setLoc((p) => ({ ...p, [k]: v }));
+  const [activeTab, setActiveTab] = useState("ai");
 
   const [checkingUpdate, setCheckingUpdate] = useState(false);
 
@@ -714,7 +731,7 @@ const initialMount = useRef(true);
       onClick={onClose}>
       <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0, y: 10 }} transition={{ type: "spring", stiffness: 350, damping: 30 }}
-        className={`${bg} ${txt} rounded-2xl border ${brd} shadow-xl w-full max-w-2xl max-h-[88vh] overflow-y-auto cozy-scroll`}
+        className={`${bg} ${txt} rounded-2xl border ${brd} shadow-xl w-full max-w-md max-h-[88vh] overflow-y-auto cozy-scroll`}
         onClick={(e) => e.stopPropagation()}
         style={{
           "--scrollbar-thumb": isDark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)",
@@ -726,10 +743,28 @@ const initialMount = useRef(true);
           <button onClick={onClose} className={`p-1.5 rounded-lg ${hov} transition-colors`}><X size={15} /></button>
         </div>
 
-        <div className="px-6 py-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+        {/* ── Tabs ── */}
+        <div className={`flex gap-1 px-5 pt-3 border-b ${brd}`}>
+          {[
+            { key: "ai", label: t("tab_ai", loc.language) },
+            { key: "personalization", label: t("tab_personalization", loc.language) },
+            { key: "advanced", label: t("tab_advanced", loc.language) },
+          ].map(({ key, label }) => (
+            <button key={key} onClick={() => setActiveTab(key)}
+              className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                activeTab === key
+                  ? (isDark ? "border-slate-200 text-white" : "border-slate-900 text-slate-900")
+                  : `border-transparent ${muted} hover:text-current`
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
 
-            {/* ── Left column: Provider & model ── */}
+        <div className="px-6 py-4 min-h-[420px]">
+
+          {/* ════════════════════ AI TAB ════════════════════ */}
+          {activeTab === "ai" && (
             <div className="space-y-3">
               {/* Provider */}
               <div>
@@ -791,12 +826,6 @@ const initialMount = useRef(true);
                         </div>
                       )}
                     </div>
-                    <div>
-                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>{t("model_display_name", loc.language)}</p>
-                      <input value={loc.modelDisplayName ?? ""} onChange={(e) => set("modelDisplayName", e.target.value)}
-                        placeholder={t("model_display_name_placeholder_custom", loc.language)}
-                        className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
-                    </div>
                   </div>
                 )}
 
@@ -853,12 +882,6 @@ const initialMount = useRef(true);
                         </div>
                       )}
                     </div>
-                    <div>
-                      <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>{t("model_display_name", loc.language)}</p>
-                      <input value={loc.modelDisplayName ?? ""} onChange={(e) => set("modelDisplayName", e.target.value)}
-                        placeholder={t("model_display_name_placeholder_custom", loc.language)}
-                        className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
-                    </div>
                   </div>
                 )}
               </div>
@@ -887,9 +910,39 @@ const initialMount = useRef(true);
                   {t("max_response_length_hint", loc.language)}
                 </p>
               </div>
-            </div>
 
-            {/* ── Right column: Appearance & persona ── */}
+              {/* System Prompt Category */}
+              <div className="pt-1">
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>{t("system_prompt", loc.language)}</p>
+                <div className={`grid grid-cols-3 gap-1.5 p-1 rounded-xl mb-2 ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
+                  {[
+                    { key: "Studying", label: t("persona_studying", loc.language) },
+                    { key: "Dreaming", label: t("persona_dreaming", loc.language) },
+                    { key: "Custom", label: t("persona_custom", loc.language) },
+                  ].map(({ key, label }) => (
+                    <button key={key} onClick={() => set("persona", key)}
+                      className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.persona === key)}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <AnimatePresence>
+                  {loc.persona === "Custom" && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
+                      <textarea value={loc.customPrompt} onChange={(e) => set("customPrompt", e.target.value)}
+                        placeholder={t("custom_prompt_placeholder", loc.language)}
+                        className={`w-full rounded-xl border px-3 py-2 text-xs resize-none ${inp} focus:outline-none focus:border-slate-400 transition-colors`}
+                        rows={4} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════ PERSONALIZATION TAB ════════════════ */}
+          {activeTab === "personalization" && (
             <div className="space-y-3">
               {/* User Name */}
               <div>
@@ -899,40 +952,12 @@ const initialMount = useRef(true);
                   className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
               </div>
 
-              {/* Font Selection */}
+              {/* Model display name */}
               <div>
-                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>{t("font", loc.language)}</p>
-                <div className={`grid grid-cols-3 gap-1.5 p-1 rounded-xl ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
-                  {Object.entries(FONTS).map(([key, f]) => (
-                    <button key={key} onClick={() => set("font", key)}
-                      style={{ fontFamily: f.value }}
-                      className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.font === key)}`}>
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Text Size */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>{t("text_size", loc.language)}</p>
-                  <span className={`text-[10px] font-mono ${muted}`}>{loc.fontSize}px</span>
-                </div>
-                <input
-                  type="range"
-                  min={12}
-                  max={20}
-                  step={1}
-                  value={loc.fontSize}
-                  onChange={(e) => set("fontSize", Number(e.target.value))}
-                  className="cozy-slider w-full"
-                  style={{
-                    "--slider-track": isDark ? "#272a31" : "#cbd5e1",
-                    "--slider-thumb": isDark ? "#f1f5f9" : "#0f172a",
-                    "--slider-thumb-border": isDark ? "#121417" : "#ffffff",
-                  }}
-                />
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1`}>{t("model_display_name", loc.language)}</p>
+                <input value={loc.modelDisplayName ?? ""} onChange={(e) => set("modelDisplayName", e.target.value)}
+                  placeholder={t("model_display_name_placeholder_custom", loc.language)}
+                  className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors`} />
               </div>
 
               {/* Mascot Toggle */}
@@ -990,37 +1015,44 @@ const initialMount = useRef(true);
                 </AnimatePresence>
               </div>
 
-              {/* System Prompt Category */}
-              <div className="pt-1">
-                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>{t("system_prompt", loc.language)}</p>
-                <div className={`grid grid-cols-3 gap-1.5 p-1 rounded-xl mb-2 ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
-                  {[
-                    { key: "Studying", label: t("persona_studying", loc.language) },
-                    { key: "Dreaming", label: t("persona_dreaming", loc.language) },
-                    { key: "Custom", label: t("persona_custom", loc.language) },
-                  ].map(({ key, label }) => (
-                    <button key={key} onClick={() => set("persona", key)}
-                      className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.persona === key)}`}>
-                      {label}
+              {/* Font Selection */}
+              <div>
+                <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>{t("font", loc.language)}</p>
+                <div className={`grid grid-cols-3 gap-1.5 p-1 rounded-xl ${isDark ? "bg-[#181a1e]" : "bg-[#f1f5f9]"}`}>
+                  {Object.entries(FONTS).map(([key, f]) => (
+                    <button key={key} onClick={() => set("font", key)}
+                      style={{ fontFamily: f.value }}
+                      className={`py-2 rounded-lg border text-xs transition-all ${pill(loc.font === key)}`}>
+                      {f.label}
                     </button>
                   ))}
                 </div>
-
-                
-
-                <AnimatePresence>
-                  {loc.persona === "Custom" && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}>
-                      <textarea value={loc.customPrompt} onChange={(e) => set("customPrompt", e.target.value)}
-                        placeholder={t("custom_prompt_placeholder", loc.language)}
-                        className={`w-full rounded-xl border px-3 py-2 text-xs resize-none ${inp} focus:outline-none focus:border-slate-400 transition-colors`}
-                        rows={4} />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
               </div>
-              {/* ─── Выбор языка ─── */}
-              <div className={`pt-3 mt-3 border-t ${isDark ? "border-[#272a31]" : "border-[#cbd5e1]"}`}>
+
+              {/* Text Size */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted}`}>{t("text_size", loc.language)}</p>
+                  <span className={`text-[10px] font-mono ${muted}`}>{loc.fontSize}px</span>
+                </div>
+                <input
+                  type="range"
+                  min={12}
+                  max={20}
+                  step={1}
+                  value={loc.fontSize}
+                  onChange={(e) => set("fontSize", Number(e.target.value))}
+                  className="cozy-slider w-full"
+                  style={{
+                    "--slider-track": isDark ? "#272a31" : "#cbd5e1",
+                    "--slider-thumb": isDark ? "#f1f5f9" : "#0f172a",
+                    "--slider-thumb-border": isDark ? "#121417" : "#ffffff",
+                  }}
+                />
+              </div>
+
+              {/* Language */}
+              <div>
                 <p className={`text-[10px] font-semibold uppercase tracking-wider ${muted} mb-1.5`}>
                   {t("language", loc.language)}
                 </p>
@@ -1034,52 +1066,57 @@ const initialMount = useRef(true);
                 </div>
               </div>
             </div>
-            
-          </div>
+          )}
+
+          {/* ════════════════════ ADVANCED TAB ════════════════════ */}
+          {activeTab === "advanced" && (
+            <div className="space-y-3">
+              {/* Автообновления */}
+              <div className="flex items-center justify-between pb-1">
+                <div>
+                  <p className="text-xs font-medium">{t("enable_auto_updates", loc.language)}</p>
+                  <p className={`text-[10px] ${muted} mt-0.5`}>{t("enable_auto_updates_hint", loc.language)}</p>
+                </div>
+                <button
+                  onClick={() => set("enableAutoUpdates", !loc.enableAutoUpdates)}
+                  className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${
+                    loc.enableAutoUpdates
+                      ? (isDark ? "bg-slate-200" : "bg-slate-900")
+                      : (isDark ? "bg-[#272a31]" : "bg-[#cbd5e1]")
+                  }`}>
+                  <motion.span
+                    layout
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    className={`absolute top-0.5 w-5 h-5 rounded-full ${isDark ? "bg-[#121417]" : "bg-white"}`}
+                    style={{ left: loc.enableAutoUpdates ? "18px" : "2px" }}
+                  />
+                </button>
+              </div>
+
+              <button
+                onClick={handleCheckUpdates}
+                disabled={checkingUpdate}
+                className={`w-full py-2.5 px-4 rounded-xl border text-xs font-medium transition-all flex items-center justify-center gap-2 ${
+                  isDark
+                    ? "bg-[#1f2228] border-[#2f333c] text-zinc-200 hover:bg-[#272a31]"
+                    : "bg-white border-zinc-300 text-zinc-800 hover:bg-zinc-50"
+                } disabled:opacity-50`}
+              >
+                {checkingUpdate && <RotateCw size={12} className="animate-spin" />}
+                <span>
+                  {checkingUpdate
+                    ? t("checking_for_updates", loc.language)
+                    : t("check_for_updates", loc.language)}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
 
-        <div className="px-5 pb-5">
-          {/* ─── Автообновления (тумблер как у маскота, в самом низу справа) ─── */}
-          <div className={`flex items-center justify-between pt-3 pb-3 border-t ${brd}`}>
-            <div>
-              <p className="text-xs font-medium">{t("enable_auto_updates", loc.language)}</p>
-              <p className={`text-[10px] ${muted} mt-0.5`}>{t("enable_auto_updates_hint", loc.language)}</p>
-            </div>
-            <button
-              onClick={() => set("enableAutoUpdates", !loc.enableAutoUpdates)}
-              className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0 ${
-                loc.enableAutoUpdates
-                  ? (isDark ? "bg-slate-200" : "bg-slate-900")
-                  : (isDark ? "bg-[#272a31]" : "bg-[#cbd5e1]")
-              }`}>
-              <motion.span
-                layout
-                transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                className={`absolute top-0.5 w-5 h-5 rounded-full ${isDark ? "bg-[#121417]" : "bg-white"}`}
-                style={{ left: loc.enableAutoUpdates ? "18px" : "2px" }}
-              />
-            </button>
-          </div>
-
-          <button
-            onClick={handleCheckUpdates}
-            disabled={checkingUpdate}
-            className={`w-full mb-3 py-2.5 px-4 rounded-xl border text-xs font-medium transition-all flex items-center justify-center gap-2 ${
-              isDark
-                ? "bg-[#1f2228] border-[#2f333c] text-zinc-200 hover:bg-[#272a31]"
-                : "bg-white border-zinc-300 text-zinc-800 hover:bg-zinc-50"
-            } disabled:opacity-50`}
-          >
-            {checkingUpdate && <RotateCw size={12} className="animate-spin" />}
-            <span>
-              {checkingUpdate
-                ? t("checking_for_updates", loc.language)
-                : t("check_for_updates", loc.language)}
-            </span>
-          </button>
-
+        {/* ── Footer: compact Save button, bottom-right ── */}
+        <div className={`flex justify-end px-5 py-3 border-t ${brd}`}>
           <button onClick={() => { onSave(loc); onClose(); }}
-            className={`w-full py-2.5 rounded-xl text-xs transition-colors ${buttonPrimary}`}>
+            className={`px-6 py-2 rounded-lg text-xs transition-colors ${buttonPrimary}`}>
             {t("save", loc.language)}
           </button>
         </div>
@@ -1525,7 +1562,12 @@ const handleKey = (e) => {
 
   return (
     <div className={`${bg} ${txt} flex h-screen overflow-hidden transition-colors duration-200`}
-      style={{ fontFamily: currentFontFamily }}>
+      style={{
+        fontFamily: currentFontFamily,
+        paddingTop: isAndroidPlatform
+          ? `max(env(safe-area-inset-top, 0px), ${ANDROID_STATUS_BAR_FALLBACK})`
+          : "env(safe-area-inset-top, 0px)",
+      }}>
 
       {/* ─── Sidebar ─── */}
       <AnimatePresence initial={false}>
@@ -1608,7 +1650,7 @@ const handleKey = (e) => {
             height: 950,
             bottom: -24,
             right: -24,
-            opacity: 0.015,
+            opacity: 0,
             transform: "rotate(-45deg)",
           }}
         />
