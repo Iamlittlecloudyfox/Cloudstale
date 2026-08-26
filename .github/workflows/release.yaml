@@ -8,6 +8,7 @@ on:
 
 jobs:
   release:
+    if false:
     permissions:
       contents: write
     strategy:
@@ -117,7 +118,7 @@ jobs:
           echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
 
       - name: Build and Release Android with Tauri Action
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -125,8 +126,14 @@ jobs:
         with:
           projectPath: 'CloudstaleProject'
           mobile: 'android'
+          args: '--apk'
           tagName: v__VERSION__
           releaseName: "Cloudstale Release v__VERSION__"
           releaseBody: "Automated build of new version"
           releaseDraft: true
           prerelease: false
+
+      - name: Debug APK
+        run: |
+          find CloudstaleProject/src-tauri/gen/android/app/build/outputs \
+            -type f \( -name "*.apk" -o -name "*.aab" \) -print
