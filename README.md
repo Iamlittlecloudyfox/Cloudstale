@@ -28,7 +28,7 @@ It is intentionally simple. There are no unnecessary features or complex setup â
 
 ## Screenshots
 
-<img width="1920" height="1030" alt="{EE53C0FA-3FB5-4C36-8656-9AD76F6C92D8}" src="https://github.com/user-attachments/assets/0e322bca-5292-4eda-ac0e-3458cbf11a0b" />
+<img width="1920" height="1032" alt="{C80E2A11-5B95-4BAE-A3E7-BC672BADF0CE}" src="https://github.com/user-attachments/assets/3e47f381-be6f-451a-96bc-eb3f12ea1c0b" />
 
 <img width="1920" height="1031" alt="{0EE7D6F2-0B3F-4FF0-A7BA-1872B18F8F22}" src="https://github.com/user-attachments/assets/99b3b807-b162-452a-8f8a-8468163e4496" />
 
