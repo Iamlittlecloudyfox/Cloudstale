@@ -7,6 +7,7 @@ Built with React. Supports local and remote models through Ollama, OpenAI-compat
 ## Table of Contents
 
 * [Why Cloudstale?](#why-cloudstale)
+* [Screenshots](#screenshots)
 * [Features](#features)
 * [Known Supported APIs](#known-supported-apis)
 * [Tech Stack](#tech-stack)
@@ -24,6 +25,9 @@ Cloudstale started as a small personal project built around two simple ideas:
 The goal is to provide a lightweight client that makes it easy to work with local and remote models without tying the user to a single provider. Ollama can be used for local models, while custom API support allows connecting to OpenAI-compatible services, Anthropic, OpenRouter, and other providers.
 
 It is intentionally simple. There are no unnecessary features or complex setup — just a clean interface for talking to the models you want to use.
+
+## Screenshots
+
 
 ## Features
 
