@@ -116,6 +116,7 @@ jobs:
             echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
 
         - name: Build and Release Android with Tauri Action
+          id: tauri
           uses: tauri-apps/tauri-action@v0
           env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -125,7 +126,18 @@ jobs:
             projectPath: 'CloudstaleProject'
             mobile: 'android'
             tagName: v__VERSION__
-            releaseName: "Cloudstale Release v__VERSION__"
+            releaseName: "App Release v__VERSION__"
             releaseBody: "Automated build of new version"
             releaseDraft: true
             prerelease: false
+
+        - name: Upload Android Artifacts to Release
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          run: |
+            TAG="v${{ steps.tauri.outputs.appVersion }}"
+            echo "Uploading artifacts for release: $TAG"
+            
+            find ./CloudstaleProject/src-tauri/gen/android/app/build/outputs/apk -name "*.apk" -type f -exec gh release upload "$TAG" {} + || true
+            
+            find ./CloudstaleProject/src-tauri/gen/android/app/build/outputs/bundle -name "*.aab" -type f -exec gh release upload "$TAG" {} + || true
