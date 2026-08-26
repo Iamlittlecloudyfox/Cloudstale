@@ -1124,7 +1124,7 @@ export default function App() {
   const currentFontFamily = FONTS[settings.font]?.value || FONTS.inter.value;
 
   useEffect(() => {
-    if (!settings.enableAutoUpdates) {
+    if (settings.enableAutoUpdates) {
       checkForAppUpdates(false);
     }
   }, []);
@@ -1608,7 +1608,7 @@ const handleKey = (e) => {
             height: 950,
             bottom: -24,
             right: -24,
-            opacity: 0.1,
+            opacity: 0.015,
             transform: "rotate(-45deg)",
           }}
         />

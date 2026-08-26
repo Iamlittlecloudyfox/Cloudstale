@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "Cloudstale",
-        "width": 1200,
-        "height": 1000,
+        "width": 1920,
+        "height": 1080,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": true
       }
     ],
     "security": {
