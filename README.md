@@ -46,6 +46,7 @@ It is intentionally simple. There are no unnecessary features or complex setup â
 | OpenAI-compatible | Yes     |
 | Anthropic         | Yes     |
 | OpenRouter        | Yes     |
+| DeepSeel          | Yes     |
 
 ## Tech Stack
 
