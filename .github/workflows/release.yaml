@@ -58,7 +58,7 @@ jobs:
           projectPath: 'CloudstaleProject'
           tagName: v__VERSION__
           releaseName: "App Release v__VERSION__"
-          releaseBody: "Автоматическая сборка новой версии."
+          releaseBody: "Automated build of new version"
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
@@ -119,6 +119,6 @@ jobs:
             mobile: 'android'
             tagName: v__VERSION__
             releaseName: "App Release v__VERSION__"
-            releaseBody: "Автоматическая сборка новой версии."
+            releaseBody: "Automated build of new version"
             releaseDraft: true
             prerelease: false
