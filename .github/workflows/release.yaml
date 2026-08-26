@@ -64,62 +64,61 @@ jobs:
           args: ${{ matrix.args }}
 
   release-android:
-  permissions:
-    contents: write
-  runs-on: ubuntu-22.04
+      permissions:
+        contents: write
+      runs-on: ubuntu-22.04
+      steps:
+        - name: Checkout repository
+          uses: actions/checkout@v4
 
-  steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+        - name: Setup Node.js
+          uses: actions/setup-node@v4
+          with:
+            node-version: lts/*
+            cache: 'npm'
+            cache-dependency-path: 'CloudstaleProject/package-lock.json'
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: lts/*
-        cache: 'npm'
-        cache-dependency-path: 'CloudstaleProject/package-lock.json'
+        - name: Setup Java
+          uses: actions/setup-java@v4
+          with:
+            distribution: 'temurin'
+            java-version: '17'
 
-    - name: Setup Java
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '17'
+        - name: Setup Android SDK
+          uses: android-actions/setup-android@v3
 
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
+        - name: Install Android NDK
+          run: |
+            yes | sdkmanager --licenses > /dev/null || true
+            sdkmanager --install "ndk;27.0.12077973"
+            echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
 
-    - name: Install Android NDK
-      run: |
-        yes | sdkmanager --licenses > /dev/null || true
-        sdkmanager --install "ndk;27.0.12077973"
-        echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> "$GITHUB_ENV"
+        - name: Install Rust stable
+          uses: dtolnay/rust-toolchain@stable
+          with:
+            targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
 
-    - name: Install Rust stable
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+        - name: Install frontend dependencies
+          working-directory: ./CloudstaleProject
+          run: npm ci
 
-    - name: Install frontend dependencies
-      working-directory: ./CloudstaleProject
-      run: npm ci
+        - name: Setup Android signing
+          working-directory: ./CloudstaleProject/src-tauri/gen/android
+          run: |
+            echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
+            echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
+            base64 -d <<< "${{ secrets.ANDROID_KEY_BASE64 }}" > "$RUNNER_TEMP/keystore.jks"
+            echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
 
-    - name: Setup Android signing
-      working-directory: ./CloudstaleProject/src-tauri/gen/android
-      run: |
-        echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > keystore.properties
-        echo "password=${{ secrets.ANDROID_KEY_PASSWORD }}" >> keystore.properties
-        base64 -d <<< "${{ secrets.ANDROID_KEY_BASE64 }}" > "$RUNNER_TEMP/keystore.jks"
-        echo "storeFile=$RUNNER_TEMP/keystore.jks" >> keystore.properties
-
-    - name: Build and Release Android with Tauri Action
-      uses: tauri-apps/tauri-action@v0
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        projectPath: 'CloudstaleProject'
-        mobile: 'android'
-        tagName: v__VERSION__
-        releaseName: "App Release v__VERSION__"
-        releaseBody: "Автоматическая сборка новой версии."
-        releaseDraft: true
-        prerelease: false
+        - name: Build and Release Android with Tauri Action
+          uses: tauri-apps/tauri-action@v0
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          with:
+            projectPath: 'CloudstaleProject'
+            mobile: 'android'
+            tagName: v__VERSION__
+            releaseName: "App Release v__VERSION__"
+            releaseBody: "Автоматическая сборка новой версии."
+            releaseDraft: true
+            prerelease: false
