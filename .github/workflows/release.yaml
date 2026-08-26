@@ -57,7 +57,7 @@ jobs:
         with:
           projectPath: 'CloudstaleProject'
           tagName: v__VERSION__
-          releaseName: "App Release v__VERSION__"
+          releaseName: "Cloudstale Release v__VERSION__"
           releaseBody: "Automated build of new version"
           releaseDraft: true
           prerelease: false
@@ -123,7 +123,7 @@ jobs:
             projectPath: 'CloudstaleProject'
             mobile: 'android'
             tagName: v__VERSION__
-            releaseName: "App Release v__VERSION__"
+            releaseName: "Cloudstale Release v__VERSION__"
             releaseBody: "Automated build of new version"
             releaseDraft: true
             prerelease: false
