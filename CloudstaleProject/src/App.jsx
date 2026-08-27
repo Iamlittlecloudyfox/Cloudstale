@@ -44,12 +44,32 @@ function normalizeChatUrl(rawUrl, style) {
 
 const MIN_THINKING_DISPLAY_MS = 550;
 
+// Inactivity thresholds for the "bored" / "sleeping" idle states
+const IDLE_BORED_MS = 4 * 60 * 1000;   // 4 minutes of inactivity
+const IDLE_SLEEP_MS = 7 * 60 * 1000;  // 7 minutes of inactivity
+
+// If the model hasn't produced a first token after this long, switch to the
+// second, "deeper" thinking pose.
+const DEEP_THINK_MS = 15 * 1000;
+
+// How long the one-off states stay on screen before falling back to idle.
+const GREETING_DISPLAY_MS = 2600;
+const ERROR_DISPLAY_MS = 4000;
+
+// Index map (shared by both palettes below):
+// 0 idle · 1 idle_blink · 2 think · 3 answer · 4 answer2
+// 5 think2 (deep thinking) · 6 bored · 7 sleep · 8 greeting · 9 error
 const MASCOT_IMAGES_LIGHT = [
   "/mascot/idle.png",
   "/mascot/idle_blink.png",
   "/mascot/think.png",
   "/mascot/answer.png",
   "/mascot/answer2.png",
+  "/mascot/think2.png",
+  "/mascot/bored.png",
+  "/mascot/sleep.png",
+  "/mascot/greet.png",
+  "/mascot/error.png",
 ];
 
 const MASCOT_IMAGES_DARK = [
@@ -58,6 +78,11 @@ const MASCOT_IMAGES_DARK = [
   "/mascot/dark/think_dark.png",
   "/mascot/dark/answer_dark.png",
   "/mascot/dark/answer2_dark.png",
+  "/mascot/dark/think2_dark.png",
+  "/mascot/dark/bored_dark.png",
+  "/mascot/dark/sleep_dark.png",
+  "/mascot/dark/greet_dark.png",
+  "/mascot/dark/error_dark.png",
 ];
 
 const ALL_MASCOT_IMAGES = [...MASCOT_IMAGES_LIGHT, ...MASCOT_IMAGES_DARK];
@@ -72,7 +97,7 @@ const GREETING_TEMPLATES = [
   (name) => `Yip Yap n' clouds!`,
   (name) => `Hallo, ${name}.`,
   (name) => `What are we working on, ${name}?`,
-  (name) => `Unleash your imagination!`,
+  (name) => `Unleash your imagination.`,
   (name) => `Always good to see you, ${name}.`,
   (name) => `Ready when you are.`,
   (name) => `What's on your mind today, ${name}?`,
@@ -353,11 +378,36 @@ function FoxMascot({ state = "idle", size = 480, isDark = false }) {
       return () => { cancelled = true; };
     }
 
+    if (state === "thinking2") {
+      setDisplay({ img: images[5], instant: false }); // think2.png (deep thinking)
+      return () => { cancelled = true; };
+    }
+
     if (state === "answering") {
       setDisplay({
         img: Math.random() < 0.5 ? images[3] : images[4], // answer / answer2
         instant: false,
       });
+      return () => { cancelled = true; };
+    }
+
+    if (state === "bored") {
+      setDisplay({ img: images[6], instant: false }); // bored.png
+      return () => { cancelled = true; };
+    }
+
+    if (state === "sleeping") {
+      setDisplay({ img: images[7], instant: false }); // sleep.png
+      return () => { cancelled = true; };
+    }
+
+    if (state === "greeting") {
+      setDisplay({ img: images[8], instant: false }); // greet.png
+      return () => { cancelled = true; };
+    }
+
+    if (state === "error") {
+      setDisplay({ img: images[9], instant: false }); // error.png
       return () => { cancelled = true; };
     }
 
@@ -1158,6 +1208,9 @@ export default function App() {
   const currentRequestIdRef = useRef(null);
   const textareaRef = useRef(null);
   const streamRunRef = useRef(0);
+  const boredTimerRef = useRef(null);
+  const sleepTimerRef = useRef(null);
+  const greetingTimerRef = useRef(null);
   const isDark = settings.theme === "dark";
   const activeChat = chats.find((c) => c.id === activeChatId) ?? null;
   const messages = activeChat?.messages ?? [];
@@ -1169,6 +1222,55 @@ export default function App() {
       checkForAppUpdates(false);
     }
   }, []);
+
+  // ── Idle mascot: "bored" after 7min of inactivity, "sleeping" after 10min ──
+  const scheduleIdleTimers = useCallback(() => {
+    clearTimeout(boredTimerRef.current);
+    clearTimeout(sleepTimerRef.current);
+    boredTimerRef.current = setTimeout(() => {
+      setMascotState((s) => (s === "idle" ? "bored" : s));
+    }, IDLE_BORED_MS);
+    sleepTimerRef.current = setTimeout(() => {
+      setMascotState((s) => (s === "idle" || s === "bored" ? "sleeping" : s));
+    }, IDLE_SLEEP_MS);
+  }, []);
+
+  // (Re)start the idle countdown whenever the mascot is free to be idle again.
+  useEffect(() => {
+    if (streaming) {
+      clearTimeout(boredTimerRef.current);
+      clearTimeout(sleepTimerRef.current);
+      return;
+    }
+    scheduleIdleTimers();
+    return () => {
+      clearTimeout(boredTimerRef.current);
+      clearTimeout(sleepTimerRef.current);
+    };
+  }, [streaming, scheduleIdleTimers]);
+
+  // Any user activity wakes the mascot up and resets the countdown.
+  useEffect(() => {
+    const handleActivity = () => {
+      if (streaming) return;
+      setMascotState((s) => (s === "bored" || s === "sleeping" ? "idle" : s));
+      scheduleIdleTimers();
+    };
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "wheel"];
+    events.forEach((ev) => window.addEventListener(ev, handleActivity, { passive: true }));
+    return () => events.forEach((ev) => window.removeEventListener(ev, handleActivity));
+  }, [streaming, scheduleIdleTimers]);
+
+  // ── Greeting: plays once whenever the empty/home screen appears ──
+  useEffect(() => {
+    clearTimeout(greetingTimerRef.current);
+    if (hasMessages || streaming) return;
+    setMascotState((s) => (s === "idle" || s === "bored" || s === "sleeping" ? "greeting" : s));
+    greetingTimerRef.current = setTimeout(() => {
+      setMascotState((s) => (s === "greeting" ? "idle" : s));
+    }, GREETING_DISPLAY_MS);
+    return () => clearTimeout(greetingTimerRef.current);
+  }, [hasMessages, activeChatId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleScroll = useCallback(() => {
     if (!scrollContainerRef.current) return;
@@ -1263,6 +1365,15 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
   setStreamingMsgId(aId);
   setMascotState("thinking");
   const thinkStartedAt = performance.now();
+  let hadError = false;
+
+  // If the model is still "thinking" (no token yet) after DEEP_THINK_MS,
+  // switch to the second, deeper thinking pose.
+  let deepThinkTimer = setTimeout(() => {
+    if (streamRunRef.current === runId) {
+      setMascotState((s) => (s === "thinking" ? "thinking2" : s));
+    }
+  }, DEEP_THINK_MS);
 
   await new Promise(requestAnimationFrame);
   ls.set("cozy_pending_stream", { chatId, aId, requestId });
@@ -1275,6 +1386,7 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
   const applyToken = (token) => {
     if (!isAnswering) {
       isAnswering = true;
+      clearTimeout(deepThinkTimer);
       const elapsed = performance.now() - thinkStartedAt;
       const delay = Math.max(0, MIN_THINKING_DISPLAY_MS - elapsed);
       const trigger = () => { if (streamRunRef.current === runId) setMascotState("answering"); };
@@ -1314,6 +1426,7 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
     const unlistenChunk = await listen(`stream-chunk-${requestId}`, (e) => processRawChunk(e.payload));
 
     const finish = () => {
+      clearTimeout(deepThinkTimer);
       unlistenChunk();
       unlistenDone();
       unlistenError();
@@ -1332,6 +1445,7 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
     });
 
     const unlistenError = await listen(`stream-error-${requestId}`, (e) => {
+      hadError = true;
       const errMsg = e.payload;
       setChats((p) => p.map((c) => c.id === chatId
         ? {
@@ -1402,6 +1516,7 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
 
       await invoke("stream_chat", { requestId, url, headers, body });
     } catch (err) {
+      hadError = true;
       ls.set("cozy_pending_stream", null);
       setChats((p) => p.map((c) => c.id === chatId
         ? { ...c, messages: c.messages.map((m) => m.id === aId ? { ...m, content: `⚠️ **Error:** ${err}`, isError: true } : m) }
@@ -1413,8 +1528,15 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
   if (streamRunRef.current === runId) {
     setStreaming(false);
     setStreamingMsgId(null);
-    setMascotState("idle");
     currentRequestIdRef.current = null;
+    if (hadError) {
+      setMascotState("error");
+      setTimeout(() => {
+        if (streamRunRef.current === runId) setMascotState("idle");
+      }, ERROR_DISPLAY_MS);
+    } else {
+      setMascotState("idle");
+    }
   }
 }, [settings]);
 
@@ -1725,7 +1847,7 @@ const handleKey = (e) => {
 
           {hasMessages && settings.showMascot && (
             <div className="absolute bottom-[90px] right-6 lg:right-10 pointer-events-none opacity-90 transition-all duration-300">
-              <FoxMascot state={mascotState} size={275} isDark={isDark} />
+              <FoxMascot state={mascotState === "greeting" ? "idle" : mascotState} size={275} isDark={isDark} />
             </div>
           )}
 
