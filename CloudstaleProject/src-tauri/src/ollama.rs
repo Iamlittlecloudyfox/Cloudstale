@@ -13,7 +13,10 @@ impl Default for StreamRegistry {
 }
 
 #[tauri::command]
-pub async fn http_get_json(url: String, headers: HashMap<String, String>) -> Result<String, String> {
+pub async fn http_get_json(
+    url: String,
+    headers: HashMap<String, String>,
+) -> Result<String, String> {
     let client = reqwest::Client::new();
     let mut req = client.get(&url);
     for (k, v) in headers {
@@ -84,7 +87,10 @@ pub async fn stream_chat(
 }
 
 #[tauri::command]
-pub async fn abort_stream(registry: State<'_, StreamRegistry>, request_id: String) -> Result<(), String> {
+pub async fn abort_stream(
+    registry: State<'_, StreamRegistry>,
+    request_id: String,
+) -> Result<(), String> {
     if let Some(notify) = registry.0.lock().await.get(&request_id) {
         notify.notify_one();
     }

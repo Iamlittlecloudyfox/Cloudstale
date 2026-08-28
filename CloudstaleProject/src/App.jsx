@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
-import { Plus, Settings, Send, Trash2, X, Moon, Sun, MessageSquare, Pencil, RotateCw } from "lucide-react"; import { motion, AnimatePresence } from "framer-motion";
+import { Plus, Settings, Send, Trash2, X, Moon, Sun, MessageSquare, Pencil, RotateCw, Paperclip, FileText } from "lucide-react"; import { motion, AnimatePresence } from "framer-motion";
 import { check } from "@tauri-apps/plugin-updater";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { readFile } from "@tauri-apps/plugin-fs";
 import { listen } from "@tauri-apps/api/event";
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -42,11 +44,184 @@ function normalizeChatUrl(rawUrl, style) {
   return `${trimmed}/chat/completions`;
 }
 
+// ─── Per-provider message-shape converters ─────────────────────────────────
+// Internally a message is always { role, content, images?: [{mimeType, base64}] }.
+// Each backend wants that shaped differently on the wire.
+function toOllamaMessages(apiMsgs) {
+  return apiMsgs.map((m) => ({
+    role: m.role,
+    content: m.content,
+    ...(m.images?.length ? { images: m.images.map((i) => i.base64) } : {}),
+  }));
+}
+
+function toAnthropicMessages(apiMsgs) {
+  return apiMsgs.filter((m) => m.role !== "system").map((m) => {
+    if (!m.images?.length) return { role: m.role, content: m.content };
+    return {
+      role: m.role,
+      content: [
+        ...m.images.map((img) => ({
+          type: "image",
+          source: { type: "base64", media_type: img.mimeType, data: img.base64 },
+        })),
+        { type: "text", text: m.content || "" },
+      ],
+    };
+  });
+}
+
+function toOpenAIMessages(apiMsgs) {
+  return apiMsgs.map((m) => {
+    if (!m.images?.length) return { role: m.role, content: m.content };
+    return {
+      role: m.role,
+      content: [
+        { type: "text", text: m.content || "" },
+        ...m.images.map((img) => ({
+          type: "image_url",
+          image_url: { url: `data:${img.mimeType};base64,${img.base64}` },
+        })),
+      ],
+    };
+  });
+}
+
 const MIN_THINKING_DISPLAY_MS = 550;
 
+// ─── Attachments (images & text/code files) ────────────────────────────────
+const MAX_ATTACHMENTS_PER_MESSAGE = 6;
+const MAX_IMAGE_DIMENSION = 1568; // long-edge cap; keeps quality while shrinking payload/storage a lot
+const IMAGE_JPEG_QUALITY = 0.85;
+const MAX_TEXT_FILE_CHARS = 100000; // ~100KB of text; longer files get truncated
+
+const TEXT_FILE_EXTENSIONS = new Set([
+  "txt", "md", "markdown", "json", "csv", "tsv", "yaml", "yml", "xml", "html", "htm", "css", "scss",
+  "js", "jsx", "mjs", "cjs", "ts", "tsx", "py", "rb", "go", "rs", "java", "c", "h", "cpp", "hpp", "cs",
+  "php", "sh", "bash", "zsh", "sql", "toml", "ini", "env", "log", "gitignore", "dockerfile", "makefile",
+  "r", "swift", "kt", "kts", "lua", "pl", "scala", "vue", "svelte", "graphql", "proto",
+]);
+
+const EXT_TO_LANG = {
+  js: "javascript", jsx: "jsx", mjs: "javascript", cjs: "javascript", ts: "typescript", tsx: "tsx",
+  py: "python", rb: "ruby", go: "go", rs: "rust", java: "java", c: "c", h: "c", cpp: "cpp", hpp: "cpp",
+  cs: "csharp", php: "php", sh: "bash", bash: "bash", zsh: "bash", sql: "sql", json: "json",
+  yml: "yaml", yaml: "yaml", md: "markdown", markdown: "markdown", html: "html", htm: "html",
+  css: "css", scss: "scss", xml: "xml", toml: "toml", swift: "swift", kt: "kotlin", kts: "kotlin",
+  lua: "lua", scala: "scala", vue: "vue", svelte: "svelte", csv: "", txt: "",
+};
+
+const fileExt = (name) => (name.split(".").pop() || "").toLowerCase();
+
+const getDroppedFileMimeType = (name) => {
+  const ext = fileExt(name);
+  const imageTypes = {
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    webp: "image/webp",
+    gif: "image/gif",
+    bmp: "image/bmp",
+    avif: "image/avif",
+    svg: "image/svg+xml",
+  };
+
+  if (imageTypes[ext]) return imageTypes[ext];
+  return "";
+};
+
+const isImageFile = (file) => file.type.startsWith("image/");
+
+const isTextLikeFile = (file) => {
+  if (file.type.startsWith("text/")) return true;
+  if (["application/json", "application/xml", "application/javascript", "application/x-yaml"].includes(file.type)) return true;
+  return TEXT_FILE_EXTENSIONS.has(fileExt(file.name));
+};
+
+const guessCodeLang = (name) => EXT_TO_LANG[fileExt(name)] ?? "";
+
+// Downscale + re-encode as JPEG so a photo doesn't blow past localStorage
+// limits or bloat the API payload. Loses transparency, which is an
+// acceptable tradeoff for chat attachments.
+function downscaleImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error("Read failed"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Invalid image"));
+      img.onload = () => {
+        const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(img.width, img.height));
+        const width = Math.max(1, Math.round(img.width * scale));
+        const height = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve({ dataUrl: canvas.toDataURL("image/jpeg", IMAGE_JPEG_QUALITY), mimeType: "image/jpeg" });
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function readTextFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error("Read failed"));
+    reader.onload = () => {
+      let text = String(reader.result ?? "");
+      let truncated = false;
+      if (text.length > MAX_TEXT_FILE_CHARS) {
+        text = text.slice(0, MAX_TEXT_FILE_CHARS);
+        truncated = true;
+      }
+      resolve({ text, truncated });
+    };
+    reader.readAsText(file);
+  });
+}
+
+// A message is worth sending/keeping if it has text or an attachment.
+const isValidHistoryMsg = (m) => {
+  if (!m) return false;
+  if (m.content && m.content.startsWith("⚠️")) return false;
+  const hasText = !!(m.content && m.content.trim());
+  const hasAttachments = !!(m.attachments && m.attachments.length);
+  return hasText || hasAttachments;
+};
+
+// Builds the text actually sent to the model: the user's typed message plus
+// any attached text/code files, inlined as fenced code blocks.
+const buildMessageText = (m) => {
+  const base = (m.content || "").trim();
+  const files = (m.attachments || []).filter((a) => a.kind === "file");
+  if (!files.length) return base;
+  const dumps = files.map((f) => {
+    const lang = guessCodeLang(f.name);
+    const notice = f.truncated ? "\n[...truncated...]" : "";
+    return `File: ${f.name}\n\`\`\`${lang}\n${f.text}${notice}\n\`\`\``;
+  }).join("\n\n");
+  return base ? `${base}\n\n${dumps}` : dumps;
+};
+
+// Builds the {mimeType, base64} image payload for a message, if any.
+const buildMessageImages = (m) => (m.attachments || [])
+  .filter((a) => a.kind === "image" && a.dataUrl)
+  .map((a) => ({ mimeType: a.mimeType, base64: a.dataUrl.split(",")[1] || "" }));
+
+// Converts a stored chat message into the shape streamResponse expects.
+const toApiMessage = (m) => {
+  const content = buildMessageText(m);
+  const images = buildMessageImages(m);
+  return images.length ? { role: m.role, content, images } : { role: m.role, content };
+};
+
 // Inactivity thresholds for the "bored" / "sleeping" idle states
-const IDLE_BORED_MS = 4 * 60 * 1000;   // 4 minutes of inactivity
-const IDLE_SLEEP_MS = 7 * 60 * 1000;  // 7 minutes of inactivity
+const IDLE_BORED_MS = 7 * 60 * 1000;   // 7 minutes of inactivity
+const IDLE_SLEEP_MS = 10 * 60 * 1000;  // 10 minutes of inactivity
 
 // If the model hasn't produced a first token after this long, switch to the
 // second, "deeper" thinking pose.
@@ -56,9 +231,15 @@ const DEEP_THINK_MS = 15 * 1000;
 const GREETING_DISPLAY_MS = 2600;
 const ERROR_DISPLAY_MS = 4000;
 
+// "Sigh": every this many ms of continuous generation, the mascot takes a
+// breather — streaming visibly pauses for SIGH_PAUSE_MS while it "sighs".
+const SIGH_INTERVAL_MS = 30 * 1000;
+const SIGH_PAUSE_MIN_MS = 2000;
+const SIGH_PAUSE_MAX_MS = 3000;
+
 // Index map (shared by both palettes below):
 // 0 idle · 1 idle_blink · 2 think · 3 answer · 4 answer2
-// 5 think2 (deep thinking) · 6 bored · 7 sleep · 8 greeting · 9 error
+// 5 think2 (deep thinking) · 6 bored · 7 sleep · 8 greeting · 9 error · 10 sigh
 const MASCOT_IMAGES_LIGHT = [
   "/mascot/idle.png",
   "/mascot/idle_blink.png",
@@ -70,6 +251,7 @@ const MASCOT_IMAGES_LIGHT = [
   "/mascot/sleep.png",
   "/mascot/greet.png",
   "/mascot/error.png",
+  "/mascot/sigh.png",
 ];
 
 const MASCOT_IMAGES_DARK = [
@@ -83,6 +265,7 @@ const MASCOT_IMAGES_DARK = [
   "/mascot/dark/sleep_dark.png",
   "/mascot/dark/greet_dark.png",
   "/mascot/dark/error_dark.png",
+  "/mascot/dark/sigh_dark.png",
 ];
 
 const ALL_MASCOT_IMAGES = [...MASCOT_IMAGES_LIGHT, ...MASCOT_IMAGES_DARK];
@@ -97,7 +280,7 @@ const GREETING_TEMPLATES = [
   (name) => `Yip Yap n' clouds!`,
   (name) => `Hallo, ${name}.`,
   (name) => `What are we working on, ${name}?`,
-  (name) => `Unleash your imagination.`,
+  (name) => `Unleash your imagination!`,
   (name) => `Always good to see you, ${name}.`,
   (name) => `Ready when you are.`,
   (name) => `What's on your mind today, ${name}?`,
@@ -411,6 +594,11 @@ function FoxMascot({ state = "idle", size = 480, isDark = false }) {
       return () => { cancelled = true; };
     }
 
+    if (state === "sighing") {
+      setDisplay({ img: images[10], instant: false }); // sigh.png
+      return () => { cancelled = true; };
+    }
+
     setDisplay({ img: images[0], instant: false }); // idle
 
     const scheduleBlink = () => {
@@ -489,7 +677,7 @@ function MessageContent({ text, isDark, fontSize = 14 }) {
   const codeClass = isDark ? "bg-[#16181d] text-slate-200 border border-[#272a31]" : "bg-[#f1f5f9] text-slate-800 border border-[#cbd5e1]";
 
   return (
-    <div style={{ fontSize: `${fontSize}px` }}>
+    <div className="break-words" style={{ fontSize: `${fontSize}px` }}>
       <ReactMarkdown
         remarkPlugins={[remarkMath]}
         rehypePlugins={[rehypeKatex]}
@@ -545,16 +733,41 @@ const ChatMessage = memo(function ChatMessage({
   msg, isDark, fontSize, isStreamingThis, showRegenerate, onRegenerate, userBg, userTxt, muted, hov,
 }) {
   if (msg.role === "user") {
+    const images = (msg.attachments || []).filter((a) => a.kind === "image");
+    const files = (msg.attachments || []).filter((a) => a.kind === "file");
     return (
-      <div className="flex justify-end">
-        <div className={`leading-relaxed px-4 py-2.5 rounded-2xl max-w-[82%] ${userBg} ${userTxt}`}>
-          <InlineText text={msg.content} />
-        </div>
+      <div className="flex flex-col items-end gap-1.5">
+        {images.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 justify-end max-w-[82%]">
+            {images.map((img) => (
+              <img key={img.id} src={img.dataUrl} alt={img.name}
+                className="rounded-xl object-cover w-[120px] h-[120px]" />
+            ))}
+          </div>
+        )}
+        {files.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 justify-end max-w-[82%]">
+            {files.map((f) => (
+              <div key={f.id}
+                title={f.truncated ? `${f.name} (обрезан до ${Math.round(MAX_TEXT_FILE_CHARS / 1000)}KB)` : f.name}
+                className={`flex items-center gap-1.5 pl-2 pr-3 py-1.5 rounded-xl text-xs ${userBg} ${userTxt}`}>
+                <FileText size={13} className="flex-shrink-0 opacity-70" />
+                <span className="truncate max-w-[160px]">{f.name}</span>
+                {f.truncated && <span className="opacity-60 flex-shrink-0">…</span>}
+              </div>
+            ))}
+          </div>
+        )}
+        {msg.content && (
+          <div className={`leading-relaxed px-4 py-2.5 rounded-2xl max-w-[82%] ${userBg} ${userTxt}`}>
+            <InlineText text={msg.content} />
+          </div>
+        )}
       </div>
     );
   }
   return (
-    <div className="flex flex-col gap-1 pr-4 group relative">
+    <div className="flex flex-col gap-1 pr-4 group relative min-w-0">
       {msg.content === "" && isStreamingThis
         ? <TypingDots isDark={isDark} />
         : <MessageContent text={msg.content} isDark={isDark} fontSize={fontSize} />}
@@ -1200,6 +1413,9 @@ export default function App() {
   const [editingId, setEditingId] = useState(null);
   const [editVal, setEditVal] = useState("");
   const [greetingIndex, setGreetingIndex] = useState(() => Math.floor(Math.random() * GREETING_TEMPLATES.length));
+  const [pendingAttachments, setPendingAttachments] = useState([]);
+  const [attachError, setAttachError] = useState("");
+  const fileInputRef = useRef(null);
   const endRef = useRef(null);
   const scrollContainerRef = useRef(null);
   const isAutoScrollEnabled = useRef(true);
@@ -1326,6 +1542,8 @@ export default function App() {
     setChats((p) => [{ id, title: "New Chat", messages: [], createdAt: Date.now() }, ...p]);
     setActiveChatId(id);
     setInput("");
+    setPendingAttachments([]);
+    setAttachError("");
   }, []);
 
   const deleteChat = useCallback((id, e) => {
@@ -1382,6 +1600,35 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
   let lineBuffer = "";
   let isAnswering = false;
   let lastUpdate = 0;
+  let sighing = false;
+  let sighTimeoutId = null;
+
+  const flushBuf = () => {
+    const snap = buf;
+    setChats((prev) => prev.map((c) => c.id === chatId
+      ? { ...c, messages: c.messages.map((m) => m.id === aId ? { ...m, content: snap, isError: false } : m) }
+      : c));
+  };
+
+  // Every SIGH_INTERVAL_MS of continuous generation, the mascot pauses to
+  // "sigh" for a couple of seconds — streaming visibly freezes (tokens keep
+  // arriving in the background) then catches up all at once when it resumes.
+  const scheduleSigh = () => {
+    sighTimeoutId = setTimeout(() => {
+      if (streamRunRef.current !== runId) return;
+      sighing = true;
+      setMascotState("sighing");
+      const pauseMs = SIGH_PAUSE_MIN_MS + Math.random() * (SIGH_PAUSE_MAX_MS - SIGH_PAUSE_MIN_MS);
+      sighTimeoutId = setTimeout(() => {
+        if (streamRunRef.current !== runId) return;
+        sighing = false;
+        lastUpdate = performance.now();
+        flushBuf();
+        setMascotState("answering");
+        scheduleSigh();
+      }, pauseMs);
+    }, SIGH_INTERVAL_MS);
+  };
 
   const applyToken = (token) => {
     if (!isAnswering) {
@@ -1389,17 +1636,18 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
       clearTimeout(deepThinkTimer);
       const elapsed = performance.now() - thinkStartedAt;
       const delay = Math.max(0, MIN_THINKING_DISPLAY_MS - elapsed);
-      const trigger = () => { if (streamRunRef.current === runId) setMascotState("answering"); };
+      const trigger = () => {
+        if (streamRunRef.current !== runId) return;
+        setMascotState("answering");
+        scheduleSigh();
+      };
       if (delay > 0) setTimeout(trigger, delay); else trigger();
     }
     buf += token;
     const now = performance.now();
-    if (now - lastUpdate >= 40) {
+    if (!sighing && now - lastUpdate >= 40) {
       lastUpdate = now;
-      const snap = buf;
-      setChats((prev) => prev.map((c) => c.id === chatId
-        ? { ...c, messages: c.messages.map((m) => m.id === aId ? { ...m, content: snap, isError: false } : m) }
-        : c));
+      flushBuf();
     }
   };
 
@@ -1427,6 +1675,7 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
 
     const finish = () => {
       clearTimeout(deepThinkTimer);
+      clearTimeout(sighTimeoutId);
       unlistenChunk();
       unlistenDone();
       unlistenError();
@@ -1477,7 +1726,7 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
         headers = { "Content-Type": "application/json" };
         body = JSON.stringify({
           model: settings.modelName,
-          messages: apiMsgs,
+          messages: toOllamaMessages(apiMsgs),
           stream: true,
           options: { num_predict: settings.maxTokens },
         });
@@ -1487,7 +1736,6 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
 
         if (style === "anthropic") {
           const systemMsg = apiMsgs.find((m) => m.role === "system");
-          const restMsgs = apiMsgs.filter((m) => m.role !== "system");
           headers = {
             "Content-Type": "application/json",
             "anthropic-version": "2023-06-01",
@@ -1496,7 +1744,7 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
           body = JSON.stringify({
             model: settings.modelName,
             system: systemMsg?.content,
-            messages: restMsgs,
+            messages: toAnthropicMessages(apiMsgs),
             max_tokens: settings.maxTokens,
             stream: true,
           });
@@ -1507,7 +1755,7 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
           };
           body = JSON.stringify({
             model: settings.modelName,
-            messages: apiMsgs,
+            messages: toOpenAIMessages(apiMsgs),
             stream: true,
             max_tokens: settings.maxTokens,
           });
@@ -1558,8 +1806,8 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
 
     const priorMsgs = chat.messages.slice(0, msgIndex);
     const validPrior = priorMsgs
-      .filter((m) => m && m.content && m.content.trim() && !m.content.startsWith("⚠️"))
-      .map((m) => ({ role: m.role, content: m.content.trim() }));
+      .filter(isValidHistoryMsg)
+      .map(toApiMessage);
 
     if (validPrior.length > 0) {
       const apiMsgs = [
@@ -1590,8 +1838,8 @@ const regenerateResponse = useCallback((chatId, aId) => {
 
   const priorMsgs = chat.messages.slice(0, msgIndex);
   const validPrior = priorMsgs
-    .filter((m) => m && m.content && m.content.trim() && !m.content.startsWith("⚠️"))
-    .map((m) => ({ role: m.role, content: m.content.trim() }));
+    .filter(isValidHistoryMsg)
+    .map(toApiMessage);
 
   if (validPrior.length > 0) {
     const apiMsgs = [{ role: "system", content: getSystemPrompt() }, ...validPrior];
@@ -1605,41 +1853,129 @@ const handleRegenerate = useCallback((msgId) => {
 
 const sendMessage = useCallback(async () => {
   const text = input.trim();
-  if (!text || streaming) return;
+  const attachments = pendingAttachments;
+  if ((!text && !attachments.length) || streaming) return;
   isAutoScrollEnabled.current = true; 
     forceScrollRef.current = true;
   let chatId = activeChatId;
   if (!chatId) {
     chatId = uid();
-    setChats((p) => [{ id: chatId, title: text.slice(0, 36), messages: [], createdAt: Date.now() }, ...p]);
+    setChats((p) => [{ id: chatId, title: text ? text.slice(0, 36) : (attachments[0]?.name ?? "New Chat"), messages: [], createdAt: Date.now() }, ...p]);
     setActiveChatId(chatId);
   }
 
-  const prior = (chats.find((c) => c.id === chatId)?.messages ?? [])
-    .filter((m) => m && m.content && m.content.trim() && !m.content.startsWith("⚠️"));
+  const prior = (chats.find((c) => c.id === chatId)?.messages ?? []).filter(isValidHistoryMsg);
 
-  const userMsg = { id: uid(), role: "user", content: text, ts: Date.now() };
+  const userMsg = { id: uid(), role: "user", content: text, attachments, ts: Date.now() };
   const aId = uid();
   const aMsg = { id: aId, role: "assistant", content: "", ts: Date.now() };
 
   setChats((p) => p.map((c) => c.id === chatId
     ? {
         ...c,
-        title: c.messages.length === 0 ? text.slice(0, 36) : c.title,
-        messages: [...c.messages.filter((m) => m && m.content && m.content.trim()), userMsg, aMsg],
+        title: c.messages.length === 0 ? (text ? text.slice(0, 36) : (attachments[0]?.name ?? c.title)) : c.title,
+        messages: [...c.messages.filter(isValidHistoryMsg), userMsg, aMsg],
       }
     : c));
   setInput("");
+  setPendingAttachments([]);
+  setAttachError("");
   if (textareaRef.current) textareaRef.current.style.height = "auto";
 
   const apiMsgs = [
     { role: "system", content: getSystemPrompt() },
-    ...prior.map((m) => ({ role: m.role, content: m.content.trim() })),
-    { role: "user", content: text },
+    ...prior.map(toApiMessage),
+    toApiMessage(userMsg),
   ];
 
   streamResponse(chatId, aId, apiMsgs);
-}, [input, streaming, activeChatId, chats, getSystemPrompt, streamResponse]);
+}, [input, pendingAttachments, streaming, activeChatId, chats, getSystemPrompt, streamResponse]);
+
+const handleFilesSelected = useCallback(async (fileList) => {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  setAttachError("");
+  const accepted = [];
+  let room = MAX_ATTACHMENTS_PER_MESSAGE - pendingAttachments.length;
+
+  for (const file of files) {
+    if (room <= 0) {
+      setAttachError(`Можно прикрепить не больше ${MAX_ATTACHMENTS_PER_MESSAGE} файлов за раз.`);
+      break;
+    }
+    try {
+      if (isImageFile(file)) {
+        const { dataUrl, mimeType } = await downscaleImage(file);
+        accepted.push({ id: uid(), kind: "image", name: file.name, mimeType, dataUrl, size: file.size });
+        room--;
+      } else if (isTextLikeFile(file)) {
+        const { text, truncated } = await readTextFile(file);
+        accepted.push({ id: uid(), kind: "file", name: file.name, mimeType: file.type || "text/plain", text, size: file.size, truncated });
+        room--;
+      } else {
+        setAttachError(`Формат файла «${file.name}» пока не поддерживается.`);
+      }
+    } catch {
+      setAttachError(`Не удалось прочитать «${file.name}».`);
+    }
+  }
+
+  if (accepted.length) setPendingAttachments((prev) => [...prev, ...accepted]);
+}, [pendingAttachments.length]);
+
+const removePendingAttachment = useCallback((id) => {
+  setPendingAttachments((prev) => prev.filter((a) => a.id !== id));
+}, []);
+
+// Tauri 2 file drops provide filesystem paths instead of browser File objects.
+// Read those paths through the fs plugin and feed normal File objects into the
+// same attachment pipeline used by the paperclip button.
+useEffect(() => {
+  let cancelled = false;
+  let unlisten = null;
+
+  const setupDragDrop = async () => {
+    try {
+      unlisten = await getCurrentWebview().onDragDropEvent(async (event) => {
+        if (cancelled || streaming) return;
+
+        if (event.payload.type === "drop") {
+          const paths = event.payload.paths || [];
+          if (!paths.length) return;
+
+          const droppedFiles = [];
+
+          for (const path of paths) {
+            if (cancelled) return;
+
+            try {
+              const bytes = await readFile(path);
+              const name = path.replace(/\\/g, "/").split("/").pop() || "dropped-file";
+              const mimeType = getDroppedFileMimeType(name);
+              droppedFiles.push(new File([bytes], name, { type: mimeType }));
+            } catch (err) {
+              console.error("Failed to read dropped file:", path, err);
+              setAttachError(`Не удалось прочитать «${path.split(/[/\\]/).pop() || path}».`);
+            }
+          }
+
+          if (!cancelled && droppedFiles.length) {
+            handleFilesSelected(droppedFiles);
+          }
+        }
+      });
+    } catch (err) {
+      console.error("Failed to initialize Tauri drag-and-drop:", err);
+    }
+  };
+
+  setupDragDrop();
+
+  return () => {
+    cancelled = true;
+    if (unlisten) unlisten();
+  };
+}, [handleFilesSelected, streaming]);
 
 const wrapSelection = (wrapper) => {
   const textarea = textareaRef.current;
@@ -1695,6 +2031,30 @@ const handleKey = (e) => {
           : "env(safe-area-inset-top, 0px)",
       }}>
 
+      {/* Android status bar icons are drawn in a fixed light color by the OS;
+          in light theme the app background is too pale for them to read, so
+          we paint a dark strip behind just that inset area. */}
+      {isAndroidPlatform && !isDark && (
+        <div
+          aria-hidden="true"
+          className="fixed top-0 left-0 right-0 z-[60] pointer-events-none bg-[#0b0c0e]"
+          style={{ height: `max(env(safe-area-inset-top, 0px), ${ANDROID_STATUS_BAR_FALLBACK})` }}
+        />
+      )}
+
+      {/* KaTeX display equations don't wrap and can render wider than the
+          message column (long expressions, matrices, etc). Without this,
+          an overly wide formula pushes the whole page sideways as it
+          streams in. Scroll the formula itself instead. */}
+      <style>{`
+        .katex-display {
+          overflow-x: auto;
+          overflow-y: hidden;
+          max-width: 100%;
+          padding-bottom: 2px;
+        }
+      `}</style>
+
       {/* ─── Sidebar ─── */}
       <AnimatePresence initial={false}>
         {sidebarOpen && (
@@ -1720,7 +2080,7 @@ const handleKey = (e) => {
                     initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }}
                     transition={{ duration: 0.12 }}
                     className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all ${chat.id === activeChatId ? activeItem : `${muted} ${hov}`}`}
-                    onClick={() => { if (editingId !== chat.id) setActiveChatId(chat.id); }}>
+                    onClick={() => { if (editingId !== chat.id) { setActiveChatId(chat.id); setPendingAttachments([]); setAttachError(""); } }}>
                     <MessageSquare size={13} className="flex-shrink-0 opacity-40" />
                     {editingId === chat.id
                       ? <input value={editVal}
@@ -1792,14 +2152,14 @@ const handleKey = (e) => {
         </button>
 
         {/* Message Feed / Minimal Empty State */}
-        <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
+        <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto overflow-x-hidden">
           <AnimatePresence mode="wait">
             {!hasMessages ? (
               <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="flex flex-col items-center justify-center h-full gap-2 px-6 pb-12">
                 {settings.showMascot && (
                   <div className="cursor-pointer" onClick={() => setGreetingIndex((p) => (p + 1) % GREETING_TEMPLATES.length)} title="Click to change greeting">
-                    <FoxMascot state={mascotState} size={420} isDark={isDark} />
+                    <FoxMascot state={mascotState} size="clamp(220px, 55vw, 420px)" isDark={isDark} />
                   </div>
                 )}
                 <motion.p
@@ -1846,8 +2206,8 @@ const handleKey = (e) => {
         </div>
 
           {hasMessages && settings.showMascot && (
-            <div className="absolute bottom-[90px] right-6 lg:right-10 pointer-events-none opacity-90 transition-all duration-300">
-              <FoxMascot state={mascotState === "greeting" ? "idle" : mascotState} size={275} isDark={isDark} />
+            <div className="absolute bottom-[90px] right-4 sm:right-6 lg:right-10 pointer-events-none opacity-90 transition-all duration-300">
+              <FoxMascot state={mascotState === "greeting" ? "idle" : mascotState} size="clamp(110px, 30vw, 275px)" isDark={isDark} />
             </div>
           )}
 
@@ -1856,33 +2216,74 @@ const handleKey = (e) => {
 
         {/* ── Input Box (Vertically Centered Single Line with Auto-Expansion) ── */}
         <div className="px-4 py-3.5 flex-shrink-0">
-          <div className={`max-w-2xl mx-auto ${inpBg} border ${inpBorder} rounded-2xl px-4 py-2 flex items-center gap-2.5 shadow-sm transition-all duration-150`}>
-            <textarea
-              ref={(el) => { inputRef.current = el; textareaRef.current = el; }}
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                e.target.style.height = "auto";
-                e.target.style.height = Math.min(e.target.scrollHeight, 180) + "px";
-              }}
-              onKeyDown={handleKey}
-              rows={1}
-              placeholder={t("message_placeholder", settings.language)}
-              disabled={streaming}
-              className={`flex-1 bg-transparent resize-none outline-none py-1.5 leading-5 block ${isDark ? "text-[#f1f5f9] placeholder-[#52525b]" : "text-[#0f172a] placeholder-[#94a3b8]"}`}
-              style={{ maxHeight: 180, fontSize: `${settings.fontSize}px` }}
-            />
-            <div className="flex items-center gap-1 flex-shrink-0">
-            {streaming && (
-              <button onClick={() => invoke("abort_stream", { requestId: currentRequestIdRef.current })}
-                className={`p-1.5 rounded-lg ${muted} ${hov} transition-all`}><X size={14} /></button>
+          <div className="max-w-2xl mx-auto">
+            {pendingAttachments.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {pendingAttachments.map((att) => (
+                  <div key={att.id}
+                    title={att.truncated ? `${att.name} (обрезан до ${Math.round(MAX_TEXT_FILE_CHARS / 1000)}KB)` : att.name}
+                    className={`relative flex items-center gap-2 ${inpBg} border ${inpBorder} rounded-xl pl-2 pr-1.5 py-1.5 text-xs`}>
+                    {att.kind === "image" ? (
+                      <img src={att.dataUrl} alt={att.name} className="w-8 h-8 rounded-md object-cover flex-shrink-0" />
+                    ) : (
+                      <FileText size={14} className={`flex-shrink-0 ${muted}`} />
+                    )}
+                    <span className={`max-w-[120px] truncate ${txt}`}>{att.name}</span>
+                    <button onClick={() => removePendingAttachment(att.id)} title="Remove"
+                      className={`p-0.5 rounded-full flex-shrink-0 ${muted} ${hov} transition-all`}>
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
-              <motion.button onClick={sendMessage} disabled={!input.trim() || streaming} whileTap={{ scale: 0.9 }}
-                className={`p-2 rounded-xl transition-all ${input.trim() && !streaming
-                  ? (isDark ? "bg-slate-200 text-slate-950 hover:bg-white" : "bg-slate-900 text-white hover:bg-slate-800")
-                  : `${muted} opacity-25 cursor-not-allowed`}`}>
-                <Send size={14} />
-              </motion.button>
+            {attachError && (
+              <div className="text-[11px] text-red-500 mb-1.5 px-1">{attachError}</div>
+            )}
+            <div className={`${inpBg} border ${inpBorder} rounded-2xl px-4 py-2 flex items-center gap-2.5 shadow-sm transition-all duration-150`}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,.txt,.md,.markdown,.json,.csv,.tsv,.yaml,.yml,.xml,.html,.htm,.css,.scss,.js,.jsx,.mjs,.cjs,.ts,.tsx,.py,.rb,.go,.rs,.java,.c,.h,.cpp,.hpp,.cs,.php,.sh,.bash,.sql,.toml,.ini,.log,.swift,.kt,.lua,.scala,.vue,.svelte"
+                className="hidden"
+                onChange={(e) => { handleFilesSelected(e.target.files); e.target.value = ""; }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={streaming}
+                title="Attach files"
+                className={`p-1.5 rounded-lg flex-shrink-0 ${muted} ${hov} transition-all disabled:opacity-30 disabled:cursor-not-allowed`}>
+                <Paperclip size={15} />
+              </button>
+              <textarea
+                ref={(el) => { inputRef.current = el; textareaRef.current = el; }}
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  e.target.style.height = "auto";
+                  e.target.style.height = Math.min(e.target.scrollHeight, 180) + "px";
+                }}
+                onKeyDown={handleKey}
+                rows={1}
+                placeholder={t("message_placeholder", settings.language)}
+                disabled={streaming}
+                className={`flex-1 bg-transparent resize-none outline-none py-1.5 leading-5 block ${isDark ? "text-[#f1f5f9] placeholder-[#52525b]" : "text-[#0f172a] placeholder-[#94a3b8]"}`}
+                style={{ maxHeight: 180, fontSize: `${settings.fontSize}px` }}
+              />
+              <div className="flex items-center gap-1 flex-shrink-0">
+              {streaming && (
+                <button onClick={() => invoke("abort_stream", { requestId: currentRequestIdRef.current })}
+                  className={`p-1.5 rounded-lg ${muted} ${hov} transition-all`}><X size={14} /></button>
+              )}
+                <motion.button onClick={sendMessage} disabled={(!input.trim() && !pendingAttachments.length) || streaming} whileTap={{ scale: 0.9 }}
+                  className={`p-2 rounded-xl transition-all ${(input.trim() || pendingAttachments.length) && !streaming
+                    ? (isDark ? "bg-slate-200 text-slate-950 hover:bg-white" : "bg-slate-900 text-white hover:bg-slate-800")
+                    : `${muted} opacity-25 cursor-not-allowed`}`}>
+                  <Send size={14} />
+                </motion.button>
+              </div>
             </div>
           </div>
         </div>

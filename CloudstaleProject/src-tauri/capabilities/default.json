@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "com.cloudstale.app",
   "description": "Application for LLMs",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:event:default",
@@ -21,6 +23,7 @@
           "url": "http://localhost:11434"
         }
       ]
-    }
+    },
+    "fs:default"
   ]
 }
