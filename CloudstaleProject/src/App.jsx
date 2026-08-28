@@ -220,12 +220,12 @@ const toApiMessage = (m) => {
 };
 
 // Inactivity thresholds for the "bored" / "sleeping" idle states
-const IDLE_BORED_MS = 7 * 60 * 1000;   // 7 minutes of inactivity
-const IDLE_SLEEP_MS = 10 * 60 * 1000;  // 10 minutes of inactivity
+const IDLE_BORED_MS = 4 * 60 * 1000;   // 7 minutes of inactivity
+const IDLE_SLEEP_MS = 5 * 60 * 1000;  // 10 minutes of inactivity
 
 // If the model hasn't produced a first token after this long, switch to the
 // second, "deeper" thinking pose.
-const DEEP_THINK_MS = 15 * 1000;
+const DEEP_THINK_MS = 25 * 1000;
 
 // How long the one-off states stay on screen before falling back to idle.
 const GREETING_DISPLAY_MS = 2600;
@@ -233,7 +233,7 @@ const ERROR_DISPLAY_MS = 4000;
 
 // "Sigh": every this many ms of continuous generation, the mascot takes a
 // breather — streaming visibly pauses for SIGH_PAUSE_MS while it "sighs".
-const SIGH_INTERVAL_MS = 30 * 1000;
+const SIGH_INTERVAL_MS = 60 * 1000;
 const SIGH_PAUSE_MIN_MS = 2000;
 const SIGH_PAUSE_MAX_MS = 3000;
 
@@ -2145,14 +2145,14 @@ const handleKey = (e) => {
         <button
           onClick={() => setSidebarOpen((p) => !p)}
           title="Toggle Sidebar"
-          className={`absolute top-3.5 left-3.5 z-10 p-1.5 rounded-lg ${muted} ${hov} transition-all`}>
+          className={`absolute top-3.5 left-3.5 z-20 p-1.5 rounded-lg ${muted} ${hov} transition-all`}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
           </svg>
         </button>
 
         {/* Message Feed / Minimal Empty State */}
-        <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto overflow-x-hidden">
+        <div ref={scrollContainerRef} onScroll={handleScroll} className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden">
           <AnimatePresence mode="wait">
             {!hasMessages ? (
               <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -2206,7 +2206,7 @@ const handleKey = (e) => {
         </div>
 
           {hasMessages && settings.showMascot && (
-            <div className="absolute bottom-[90px] right-4 sm:right-6 lg:right-10 pointer-events-none opacity-90 transition-all duration-300">
+            <div className="absolute z-0 bottom-[90px] right-4 sm:right-6 lg:right-10 pointer-events-none opacity-90 transition-all duration-300">
               <FoxMascot state={mascotState === "greeting" ? "idle" : mascotState} size="clamp(110px, 30vw, 275px)" isDark={isDark} />
             </div>
           )}
