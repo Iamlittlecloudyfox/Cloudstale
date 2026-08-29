@@ -2284,8 +2284,17 @@ const handleKey = (e) => {
                   </motion.div>
                 ))}
 
-                {/* ── Невидимая распорка: гарантирует, что текст остановится выше маскота ── */}
-                {settings.showMascot ? <div className="h-[220px]" /> : <div className="h-6" />}
+                {/* Android: маскот — обычный блок в потоке документа, сразу после последнего
+                    сообщения. Он не может залезть на текст, потому что физически идёт после него,
+                    а не плавает поверх. */}
+                {isAndroidPlatform && settings.showMascot && (
+                  <div className="flex justify-end pointer-events-none opacity-90">
+                    <FoxMascot state={mascotState === "greeting" ? "idle" : mascotState} size="clamp(110px, 30vw, 220px)" isDark={isDark} />
+                  </div>
+                )}
+
+                {/* ── Невидимая распорка: на ПК резервирует место под плавающего маскота ── */}
+                {!isAndroidPlatform && settings.showMascot ? <div className="h-[220px]" /> : <div className="h-6" />}
 
                 <div ref={endRef} />
               </div>
@@ -2294,8 +2303,8 @@ const handleKey = (e) => {
             </AnimatePresence>
         </div>
 
-          {hasMessages && settings.showMascot && (
-            <div className={`${isAndroidPlatform ? "fixed" : "absolute"} z-0 bottom-[90px] right-4 sm:right-6 lg:right-10 pointer-events-none opacity-90 transition-all duration-300`}>
+          {hasMessages && settings.showMascot && !isAndroidPlatform && (
+            <div className="absolute z-0 bottom-[90px] right-4 sm:right-6 lg:right-10 pointer-events-none opacity-90 transition-all duration-300">
               <FoxMascot state={mascotState === "greeting" ? "idle" : mascotState} size="clamp(110px, 30vw, 275px)" isDark={isDark} />
             </div>
           )}
