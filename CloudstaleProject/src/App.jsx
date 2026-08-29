@@ -372,6 +372,18 @@ const TRANSLATIONS = {
     retry: "Retry",
     regenerate: "Regenerate",
     regenerate_tooltip: "Regenerate full response",
+
+    // Storage & data safety
+    storage_warning: "Couldn't save your last changes — the device may be low on storage.",
+    export_now: "Export now",
+    export_chat_history: "Export chat history",
+    export_chat_history_hint: "Save a backup copy of all your chats as a file, just in case.",
+    export_success: "Chat history exported.",
+    export_failed: "Couldn't export the chat history.",
+    no_chats_to_export: "No chats to export yet.",
+    delete_chat_confirm: "Delete this chat? This can't be undone.",
+    delete_chat_confirm_title: "Delete chat",
+    connection_error_hint: "Double-check your provider, URL and API key in Settings.",
   },
   ru: {
     // Sidebar & Main
@@ -431,6 +443,18 @@ const TRANSLATIONS = {
     retry: "Повторить",
     regenerate: "Пересоздать",
     regenerate_tooltip: "Перегенерировать полный ответ",
+
+    // Storage & data safety
+    storage_warning: "Не удалось сохранить последние изменения — возможно, на устройстве закончилось место.",
+    export_now: "Экспортировать",
+    export_chat_history: "Экспорт истории чатов",
+    export_chat_history_hint: "Сохранить резервную копию всех чатов в файл — на всякий случай.",
+    export_success: "История чатов экспортирована.",
+    export_failed: "Не удалось экспортировать историю чатов.",
+    no_chats_to_export: "Пока нет чатов для экспорта.",
+    delete_chat_confirm: "Удалить этот чат? Это действие необратимо.",
+    delete_chat_confirm_title: "Удаление чата",
+    connection_error_hint: "Проверьте провайдера, URL и API-ключ в Настройках.",
   },
   de: {
     // Sidebar & Main
@@ -491,6 +515,18 @@ const TRANSLATIONS = {
     retry: "Wiederholen",
     regenerate: "Neu generieren",
     regenerate_tooltip: "Vollständige Antwort neu generieren",
+
+    // Storage & data safety
+    storage_warning: "Deine letzten Änderungen konnten nicht gespeichert werden — der Speicherplatz könnte knapp sein.",
+    export_now: "Jetzt exportieren",
+    export_chat_history: "Chatverlauf exportieren",
+    export_chat_history_hint: "Sichere alle deine Chats als Datei, nur für den Fall.",
+    export_success: "Chatverlauf exportiert.",
+    export_failed: "Chatverlauf konnte nicht exportiert werden.",
+    no_chats_to_export: "Noch keine Chats zum Exportieren.",
+    delete_chat_confirm: "Diesen Chat löschen? Das kann nicht rückgängig gemacht werden.",
+    delete_chat_confirm_title: "Chat löschen",
+    connection_error_hint: "Überprüfe Anbieter, URL und API-Schlüssel in den Einstellungen.",
   }
 };
 
@@ -519,7 +555,7 @@ const DEFAULT_SETTINGS = {
 
 const ls = {
   get: (k, def) => { try { return JSON.parse(localStorage.getItem(k) ?? "null") ?? def; } catch { return def; } },
-  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
 };
 
 // ─── Mascot ───────────────────────────────────────────────────────────────────
@@ -790,7 +826,7 @@ const ChatMessage = memo(function ChatMessage({
 
 let cachedOllamaModels = [];
 let cachedCustomModels = [];
-function SettingsModal({ settings, onSave, onClose, isDark }) {
+function SettingsModal({ settings, onSave, onClose, isDark, onExportChats }) {
   const [loc, setLoc] = useState({ ...settings });
   const set = (k, v) => setLoc((p) => ({ ...p, [k]: v }));
   const [activeTab, setActiveTab] = useState("ai");
@@ -1376,6 +1412,22 @@ const initialMount = useRef(true);
                     : t("check_for_updates", loc.language)}
                 </span>
               </button>
+
+              {/* Local backup */}
+              <div className="pt-2">
+                <p className="text-xs font-medium">{t("export_chat_history", loc.language)}</p>
+                <p className={`text-[10px] ${muted} mt-0.5 mb-2`}>{t("export_chat_history_hint", loc.language)}</p>
+                <button
+                  onClick={onExportChats}
+                  className={`w-full py-2.5 px-4 rounded-xl border text-xs font-medium transition-all flex items-center justify-center gap-2 ${
+                    isDark
+                      ? "bg-[#1f2228] border-[#2f333c] text-zinc-200 hover:bg-[#272a31]"
+                      : "bg-white border-zinc-300 text-zinc-800 hover:bg-zinc-50"
+                  }`}
+                >
+                  {t("export_chat_history", loc.language)}
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1415,6 +1467,7 @@ export default function App() {
   const [greetingIndex, setGreetingIndex] = useState(() => Math.floor(Math.random() * GREETING_TEMPLATES.length));
   const [pendingAttachments, setPendingAttachments] = useState([]);
   const [attachError, setAttachError] = useState("");
+  const [storageWarning, setStorageWarning] = useState(false);
   const fileInputRef = useRef(null);
   const endRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -1502,7 +1555,8 @@ export default function App() {
     clearTimeout(saveChatsTimer.current);
 
     saveChatsTimer.current = setTimeout(() => {
-      ls.set("cozy_chats", chats);
+      const ok = ls.set("cozy_chats", chats);
+      setStorageWarning(!ok && chats.length > 0);
     }, 400);
 
     return () => clearTimeout(saveChatsTimer.current);
@@ -1546,14 +1600,49 @@ export default function App() {
     setAttachError("");
   }, []);
 
-  const deleteChat = useCallback((id, e) => {
+  const deleteChat = useCallback(async (id, e) => {
     e.stopPropagation();
+    const confirmed = await ask(t("delete_chat_confirm", settings.language), {
+      title: t("delete_chat_confirm_title", settings.language),
+      kind: "warning",
+    });
+    if (!confirmed) return;
     setChats((p) => {
       const next = p.filter((c) => c.id !== id);
       if (id === activeChatId) setActiveChatId(next[0]?.id ?? null);
       return next;
     });
-  }, [activeChatId]);
+  }, [activeChatId, settings.language]);
+
+  // Lightweight local backup: bundles every chat into one JSON file the user
+  // can download, independent of native fs/dialog permissions.
+  const exportAllChats = useCallback(() => {
+    if (!chats.length) {
+      message(t("no_chats_to_export", settings.language), {
+        title: t("export_chat_history", settings.language),
+        kind: "info",
+      }).catch(() => {});
+      return;
+    }
+    try {
+      const payload = { exportedAt: new Date().toISOString(), chats };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `cozy-chat-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export failed:", err);
+      message(t("export_failed", settings.language), {
+        title: t("export_chat_history", settings.language),
+        kind: "error",
+      }).catch(() => {});
+    }
+  }, [chats, settings.language]);
 
   const getSystemPrompt = useCallback(() => {
   const base = settings.persona === "Custom"
@@ -1702,7 +1791,7 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
             messages: c.messages.map((m) => {
               if (m.id === aId) {
                 if (m.content && m.content.trim() && !m.content.startsWith("⚠️")) return { ...m, isError: true };
-                return { ...m, content: `⚠️ **Error:** ${errMsg}`, isError: true };
+                return { ...m, content: `⚠️ **Error:** ${errMsg}\n\n_${t("connection_error_hint", settings.language)}_`, isError: true };
               }
               return m;
             }),
@@ -1767,7 +1856,7 @@ const streamResponse = useCallback(async (chatId, aId, apiMsgs) => {
       hadError = true;
       ls.set("cozy_pending_stream", null);
       setChats((p) => p.map((c) => c.id === chatId
-        ? { ...c, messages: c.messages.map((m) => m.id === aId ? { ...m, content: `⚠️ **Error:** ${err}`, isError: true } : m) }
+        ? { ...c, messages: c.messages.map((m) => m.id === aId ? { ...m, content: `⚠️ **Error:** ${err}\n\n_${t("connection_error_hint", settings.language)}_`, isError: true } : m) }
         : c));
       finish();
     }
@@ -2206,7 +2295,7 @@ const handleKey = (e) => {
         </div>
 
           {hasMessages && settings.showMascot && (
-            <div className="absolute z-0 bottom-[90px] right-4 sm:right-6 lg:right-10 pointer-events-none opacity-90 transition-all duration-300">
+            <div className={`${isAndroidPlatform ? "fixed" : "absolute"} z-0 bottom-[90px] right-4 sm:right-6 lg:right-10 pointer-events-none opacity-90 transition-all duration-300`}>
               <FoxMascot state={mascotState === "greeting" ? "idle" : mascotState} size="clamp(110px, 30vw, 275px)" isDark={isDark} />
             </div>
           )}
@@ -2239,6 +2328,14 @@ const handleKey = (e) => {
             )}
             {attachError && (
               <div className="text-[11px] text-red-500 mb-1.5 px-1">{attachError}</div>
+            )}
+            {storageWarning && (
+              <div className="flex items-center justify-between gap-2 text-[11px] text-amber-500 mb-1.5 px-1">
+                <span>{t("storage_warning", settings.language)}</span>
+                <button onClick={exportAllChats} className="underline flex-shrink-0 hover:text-amber-400 transition-colors">
+                  {t("export_now", settings.language)}
+                </button>
+              </div>
             )}
             <div className={`${inpBg} border ${inpBorder} rounded-2xl px-4 py-2 flex items-center gap-2.5 shadow-sm transition-all duration-150`}>
               <input
@@ -2292,7 +2389,7 @@ const handleKey = (e) => {
       {/* Settings Modal */}
       <AnimatePresence>
         {showSettings && (
-          <SettingsModal settings={settings} onSave={setSettings} onClose={() => setShowSettings(false)} isDark={isDark} />
+          <SettingsModal settings={settings} onSave={setSettings} onClose={() => setShowSettings(false)} isDark={isDark} onExportChats={exportAllChats} />
         )}
       </AnimatePresence>
 
