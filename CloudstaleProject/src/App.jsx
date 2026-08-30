@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
-import { Plus, Settings, Send, Trash2, X, Moon, Sun, MessageSquare, Pencil, RotateCw, Paperclip, FileText } from "lucide-react"; import { motion, AnimatePresence } from "framer-motion";
+import { Plus, Settings, Send, Trash2, X, Moon, Sun, MessageSquare, Pencil, RotateCw, Paperclip, FileText, Copy, Check, ChevronDown, Search } from "lucide-react"; import { motion, AnimatePresence } from "framer-motion";
 import { check } from "@tauri-apps/plugin-updater";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -276,17 +276,42 @@ const FONTS = {
   times: { label: "Times English", value: "'Times New Roman', Times, serif" },
 };
 
-const GREETING_TEMPLATES = [
-  (name) => `Yip Yap n' clouds!`,
-  (name) => `Hallo, ${name}.`,
-  (name) => `What are we working on, ${name}?`,
-  (name) => `Unleash your imagination!`,
-  (name) => `Always good to see you, ${name}.`,
-  (name) => `Ready when you are.`,
-  (name) => `What's on your mind today, ${name}?`,
-  (name) => `Let's explore something interesting!`,
-  (name) => `Welcome back, ${name}.`,
-];
+const GREETING_TEMPLATES = {
+  en: [
+    (name) => `Yip yap and clouds!`,
+    (name) => `Hey there, ${name}.`,
+    (name) => `What are we working on, ${name}?`,
+    (name) => `Unleash your imagination!`,
+    (name) => `Always good to see you, ${name}.`,
+    (name) => `Ready when you are.`,
+    (name) => `What's on your mind today, ${name}?`,
+    (name) => `Let's explore something interesting!`,
+    (name) => `Welcome back, ${name}.`,
+  ],
+  ru: [
+    (name) => `Привет, ${name}.`,
+    (name) => `Над чем поработаем, ${name}?`,
+    (name) => `Дай волю фантазии!`,
+    (name) => `Всегда рад тебя видеть, ${name}.`,
+    (name) => `Готов, когда скажешь.`,
+    (name) => `Что у тебя на уме сегодня, ${name}?`,
+    (name) => `Давай исследуем что-нибудь интересное!`,
+    (name) => `С возвращением, ${name}.`,
+  ],
+  de: [
+    (name) => `Wuff und Wolken!`,
+    (name) => `Hallo, ${name}.`,
+    (name) => `Woran arbeiten wir heute, ${name}?`,
+    (name) => `Lass deiner Fantasie freien Lauf!`,
+    (name) => `Schön, dich wiederzusehen, ${name}.`,
+    (name) => `Bereit, wenn du es bist.`,
+    (name) => `Was beschäftigt dich heute, ${name}?`,
+    (name) => `Lass uns etwas Spannendes entdecken!`,
+    (name) => `Willkommen zurück, ${name}.`,
+  ],
+};
+
+const GREETING_NAME_FALLBACK = { en: "Friend", ru: "Друг", de: "Freund" };
 
 const PERSONAS = {
   Studying: {
@@ -384,6 +409,8 @@ const TRANSLATIONS = {
     delete_chat_confirm: "Delete this chat? This can't be undone.",
     delete_chat_confirm_title: "Delete chat",
     connection_error_hint: "Double-check your provider, URL and API key in Settings.",
+    search_chats: "Search chats…",
+    no_chats_found: "No chats match your search.",
   },
   ru: {
     // Sidebar & Main
@@ -455,6 +482,8 @@ const TRANSLATIONS = {
     delete_chat_confirm: "Удалить этот чат? Это действие необратимо.",
     delete_chat_confirm_title: "Удаление чата",
     connection_error_hint: "Проверьте провайдера, URL и API-ключ в Настройках.",
+    search_chats: "Поиск по чатам…",
+    no_chats_found: "Ничего не найдено по этому запросу.",
   },
   de: {
     // Sidebar & Main
@@ -527,6 +556,8 @@ const TRANSLATIONS = {
     delete_chat_confirm: "Diesen Chat löschen? Das kann nicht rückgängig gemacht werden.",
     delete_chat_confirm_title: "Chat löschen",
     connection_error_hint: "Überprüfe Anbieter, URL und API-Schlüssel in den Einstellungen.",
+    search_chats: "Chats durchsuchen…",
+    no_chats_found: "Keine Chats gefunden.",
   }
 };
 
@@ -768,6 +799,31 @@ function TypingDots({ isDark }) {
 const ChatMessage = memo(function ChatMessage({
   msg, isDark, fontSize, isStreamingThis, showRegenerate, onRegenerate, userBg, userTxt, muted, hov,
 }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    const text = msg.content || "";
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        throw new Error("clipboard api unavailable");
+      }
+    } catch {
+      // Fallback for older/less permissive Android WebViews.
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try { document.execCommand("copy"); } catch {}
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
   if (msg.role === "user") {
     const images = (msg.attachments || []).filter((a) => a.kind === "image");
     const files = (msg.attachments || []).filter((a) => a.kind === "file");
@@ -810,6 +866,13 @@ const ChatMessage = memo(function ChatMessage({
       {showRegenerate && (
         <div className={`flex items-center gap-2 pt-0.5 transition-opacity ${isAndroidPlatform ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
           <button
+            onClick={handleCopy}
+            title={copied ? "Copied!" : "Copy"}
+            className={`p-1 rounded-md text-xs flex items-center gap-1 ${muted} ${hov} transition-all`}>
+            {copied ? <Check size={11} /> : <Copy size={11} />}
+            <span className="text-[10px]">{copied ? "Copied!" : "Copy"}</span>
+          </button>
+          <button
             onClick={() => onRegenerate(msg.id)}
             title="Regenerate full response"
             className={`p-1 rounded-md text-xs flex items-center gap-1 ${muted} ${hov} transition-all`}>
@@ -826,6 +889,81 @@ const ChatMessage = memo(function ChatMessage({
 
 let cachedOllamaModels = [];
 let cachedCustomModels = [];
+// ─── Searchable Model Select ────────────────────────────────────────────────
+// A lightweight combobox: click to open, type to filter, click a row to pick.
+// Swaps in for a plain <select> once model lists get long (e.g. OpenRouter).
+function SearchableModelSelect({ models, value, onChange, isDark, inp, muted }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const wrapRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  useEffect(() => {
+    if (open) {
+      setQuery("");
+      setTimeout(() => searchInputRef.current?.focus(), 0);
+    }
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const filtered = q ? models.filter((m) => m.toLowerCase().includes(q)) : models;
+  const panelBg = isDark ? "bg-[#181a1e] border-[#272a31]" : "bg-white border-[#cbd5e1]";
+  const panelDivider = isDark ? "border-[#272a31]" : "border-[#e2e8f0]";
+  const itemHover = isDark ? "hover:bg-white/5" : "hover:bg-black/5";
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} flex items-center justify-between gap-2 cursor-pointer transition-colors`}
+      >
+        <span className="truncate">{value || "…"}</span>
+        <ChevronDown size={12} className={`flex-shrink-0 transition-transform ${open ? "rotate-180" : ""} ${muted}`} />
+      </button>
+      {open && (
+        <div className={`absolute z-30 mt-1 w-full rounded-xl border shadow-lg overflow-hidden ${panelBg}`}>
+          <div className={`flex items-center gap-1.5 px-2.5 py-1.5 border-b ${panelDivider}`}>
+            <Search size={11} className={`flex-shrink-0 ${muted}`} />
+            <input
+              ref={searchInputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search models…"
+              className="flex-1 min-w-0 bg-transparent text-xs outline-none"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className={`text-[11px] px-3 py-2 ${muted}`}>No matches.</p>
+            ) : (
+              filtered.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => { onChange(m); setOpen(false); }}
+                  className={`w-full text-left px-3 py-1.5 text-xs truncate transition-colors ${itemHover} ${m === value ? "font-semibold" : ""}`}
+                >
+                  {m}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingsModal({ settings, onSave, onClose, isDark, onExportChats }) {
   const [loc, setLoc] = useState({ ...settings });
   const set = (k, v) => setLoc((p) => ({ ...p, [k]: v }));
@@ -1108,16 +1246,14 @@ const initialMount = useRef(true);
                         </button>
                       </div>
                       {ollamaModels.length > 0 ? (
-                        <select
+                        <SearchableModelSelect
+                          models={ollamaModels}
                           value={loc.modelName}
-                          onChange={(e) => set("modelName", e.target.value)}
-                          className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors cursor-pointer`}>
-                          {ollamaModels.map((m) => (
-                            <option key={m} value={m} className={isDark ? "bg-[#181a1e] text-white" : "bg-white text-slate-900"}>
-                              {m}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(v) => set("modelName", v)}
+                          isDark={isDark}
+                          inp={inp}
+                          muted={muted}
+                        />
                       ) : (
                         <div>
                           <input value={loc.modelName} onChange={(e) => set("modelName", e.target.value)}
@@ -1164,16 +1300,14 @@ const initialMount = useRef(true);
                         </button>
                       </div>
                       {customModels.length > 0 ? (
-                        <select
+                        <SearchableModelSelect
+                          models={customModels}
                           value={loc.modelName}
-                          onChange={(e) => set("modelName", e.target.value)}
-                          className={`w-full rounded-xl border px-3 py-2 text-xs ${inp} focus:outline-none focus:border-slate-400 transition-colors cursor-pointer`}>
-                          {customModels.map((m) => (
-                            <option key={m} value={m} className={isDark ? "bg-[#181a1e] text-white" : "bg-white text-slate-900"}>
-                              {m}
-                            </option>
-                          ))}
-                        </select>
+                          onChange={(v) => set("modelName", v)}
+                          isDark={isDark}
+                          inp={inp}
+                          muted={muted}
+                        />
                       ) : (
                         <div>
                           <input value={loc.modelName} onChange={(e) => set("modelName", e.target.value)}
@@ -1464,10 +1598,11 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [editingId, setEditingId] = useState(null);
   const [editVal, setEditVal] = useState("");
-  const [greetingIndex, setGreetingIndex] = useState(() => Math.floor(Math.random() * GREETING_TEMPLATES.length));
+  const [greetingIndex, setGreetingIndex] = useState(() => Math.floor(Math.random() * GREETING_TEMPLATES.en.length));
   const [pendingAttachments, setPendingAttachments] = useState([]);
   const [attachError, setAttachError] = useState("");
   const [storageWarning, setStorageWarning] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
   const fileInputRef = useRef(null);
   const endRef = useRef(null);
   const scrollContainerRef = useRef(null);
@@ -1485,6 +1620,15 @@ export default function App() {
   const messages = activeChat?.messages ?? [];
   const hasMessages = messages.length > 0;
   const currentFontFamily = FONTS[settings.font]?.value || FONTS.inter.value;
+  const visibleChats = (() => {
+    const q = chatSearchQuery.trim().toLowerCase();
+    if (!q) return chats;
+    return chats.filter((c) =>
+      (c.title || "").toLowerCase().includes(q) ||
+      (c.messages || []).some((m) => (m.content || "").toLowerCase().includes(q))
+    );
+  })();
+  const activeGreetings = GREETING_TEMPLATES[settings.language] || GREETING_TEMPLATES.en;
 
   useEffect(() => {
     if (settings.enableAutoUpdates) {
@@ -1575,7 +1719,7 @@ export default function App() {
     }
   }, [messages]);
   useEffect(() => {
-    if (!streaming) {
+    if (!streaming && !isAndroidPlatform) {
       inputRef.current?.focus();
     }
   }, [streaming, activeChatId]);
@@ -1592,7 +1736,7 @@ export default function App() {
 
   const newChat = useCallback(() => {
     const id = uid();
-    setGreetingIndex(Math.floor(Math.random() * GREETING_TEMPLATES.length));
+    setGreetingIndex(Math.floor(Math.random() * GREETING_TEMPLATES.en.length));
     setChats((p) => [{ id, title: "New Chat", messages: [], createdAt: Date.now() }, ...p]);
     setActiveChatId(id);
     setInput("");
@@ -2120,13 +2264,15 @@ const handleKey = (e) => {
           : "env(safe-area-inset-top, 0px)",
       }}>
 
-      {/* Android status bar icons are drawn in a fixed light color by the OS;
-          in light theme the app background is too pale for them to read, so
-          we paint a dark strip behind just that inset area. */}
-      {isAndroidPlatform && !isDark && (
+      {/* Android status bar icons appear to render in a fixed dark color on this
+          device/OS build. In dark theme the app's own dark background hides
+          them, so we paint a pale strip behind just that inset area. In light
+          theme the pale app background already gives dark icons good
+          contrast, so no strip is needed there. */}
+      {isAndroidPlatform && isDark && (
         <div
           aria-hidden="true"
-          className="fixed top-0 left-0 right-0 z-[60] pointer-events-none bg-[#0b0c0e]"
+          className="fixed top-0 left-0 right-0 z-[60] pointer-events-none bg-[#f1f5f9]"
           style={{ height: `max(env(safe-area-inset-top, 0px), ${ANDROID_STATUS_BAR_FALLBACK})` }}
         />
       )}
@@ -2161,10 +2307,33 @@ const handleKey = (e) => {
               </button>
             </div>
 
+            {/* Chat Search */}
+            {chats.length > 0 && (
+              <div className="px-3 pb-2">
+                <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border ${sideBorder}`}>
+                  <Search size={12} className={`flex-shrink-0 ${muted}`} />
+                  <input
+                    value={chatSearchQuery}
+                    onChange={(e) => setChatSearchQuery(e.target.value)}
+                    placeholder={t("search_chats", settings.language)}
+                    className="flex-1 min-w-0 bg-transparent text-xs outline-none"
+                  />
+                  {chatSearchQuery && (
+                    <button onClick={() => setChatSearchQuery("")} className={`flex-shrink-0 ${muted} hover:text-current transition-colors`}>
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Chat List */}
             <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
+              {visibleChats.length === 0 && chatSearchQuery && (
+                <p className={`text-[11px] text-center px-3 py-4 ${muted}`}>{t("no_chats_found", settings.language)}</p>
+              )}
               <AnimatePresence>
-                {chats.map((chat) => (
+                {visibleChats.map((chat) => (
                   <motion.div key={chat.id} layout
                     initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }}
                     transition={{ duration: 0.12 }}
@@ -2247,7 +2416,7 @@ const handleKey = (e) => {
               <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="flex flex-col items-center justify-center h-full gap-2 px-6 pb-12">
                 {settings.showMascot && (
-                  <div className="cursor-pointer" onClick={() => setGreetingIndex((p) => (p + 1) % GREETING_TEMPLATES.length)} title="Click to change greeting">
+                  <div className="cursor-pointer" onClick={() => setGreetingIndex((p) => (p + 1) % activeGreetings.length)} title="Click to change greeting">
                     <FoxMascot state={mascotState} size="clamp(220px, 55vw, 420px)" isDark={isDark} />
                   </div>
                 )}
@@ -2256,9 +2425,9 @@ const handleKey = (e) => {
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.25 }}
-                  onClick={() => setGreetingIndex((p) => (p + 1) % GREETING_TEMPLATES.length)}
+                  onClick={() => setGreetingIndex((p) => (p + 1) % activeGreetings.length)}
                   className={`text-base md:text-lg font-medium cursor-pointer select-none transition-colors ${muted} hover:text-current`}>
-                  {GREETING_TEMPLATES[greetingIndex](settings.userName || "Friend")}
+                  {activeGreetings[greetingIndex](settings.userName || GREETING_NAME_FALLBACK[settings.language] || "Friend")}
                 </motion.p>
               </motion.div>
             ) : (
