@@ -808,7 +808,7 @@ const ChatMessage = memo(function ChatMessage({
         ? <TypingDots isDark={isDark} />
         : <MessageContent text={msg.content} isDark={isDark} fontSize={fontSize} />}
       {showRegenerate && (
-        <div className="flex items-center gap-2 pt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className={`flex items-center gap-2 pt-0.5 transition-opacity ${isAndroidPlatform ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
           <button
             onClick={() => onRegenerate(msg.id)}
             title="Regenerate full response"
@@ -2183,7 +2183,7 @@ const handleKey = (e) => {
                           onClick={(e) => e.stopPropagation()} />
                       : <span className="flex-1 text-xs truncate font-medium">{chat.title}</span>
                     }
-                    <div className="opacity-0 group-hover:opacity-100 flex gap-0.5 transition-opacity">
+                    <div className={`flex gap-0.5 transition-opacity ${isAndroidPlatform ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>
                       <button onClick={(e) => { e.stopPropagation(); setEditingId(chat.id); setEditVal(chat.title); }}
                         className={`p-1 rounded ${hov}`}><Pencil size={10} /></button>
                       <button onClick={(e) => deleteChat(chat.id, e)}
