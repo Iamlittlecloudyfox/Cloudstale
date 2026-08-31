@@ -2264,15 +2264,16 @@ const handleKey = (e) => {
           : "env(safe-area-inset-top, 0px)",
       }}>
 
-      {/* Android status bar icons appear to render in a fixed dark color on this
-          device/OS build. In dark theme the app's own dark background hides
-          them, so we paint a pale strip behind just that inset area. In light
-          theme the pale app background already gives dark icons good
-          contrast, so no strip is needed there. */}
-      {isAndroidPlatform && isDark && (
+      {/* Android system status-bar icon color is inconsistent across
+          devices/OS builds — sometimes light, sometimes dark — and we can't
+          reliably detect or control it from the webview. Instead of trying
+          to match it, we paint a fixed neutral gray strip behind the inset
+          area that gives both light and dark icons reasonable contrast,
+          regardless of theme. */}
+      {isAndroidPlatform && (
         <div
           aria-hidden="true"
-          className="fixed top-0 left-0 right-0 z-[60] pointer-events-none bg-[#f1f5f9]"
+          className="fixed top-0 left-0 right-0 z-[60] pointer-events-none bg-[#71717a]"
           style={{ height: `max(env(safe-area-inset-top, 0px), ${ANDROID_STATUS_BAR_FALLBACK})` }}
         />
       )}
