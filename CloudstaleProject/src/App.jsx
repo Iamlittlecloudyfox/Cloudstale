@@ -1598,7 +1598,10 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [editingId, setEditingId] = useState(null);
   const [editVal, setEditVal] = useState("");
-  const [greetingIndex, setGreetingIndex] = useState(() => Math.floor(Math.random() * GREETING_TEMPLATES.en.length));
+  const [greetingIndex, setGreetingIndex] = useState(() => {
+    const arr = GREETING_TEMPLATES[settings.language] || GREETING_TEMPLATES.en;
+    return Math.floor(Math.random() * arr.length);
+  });
   const [pendingAttachments, setPendingAttachments] = useState([]);
   const [attachError, setAttachError] = useState("");
   const [storageWarning, setStorageWarning] = useState(false);
@@ -1736,13 +1739,14 @@ export default function App() {
 
   const newChat = useCallback(() => {
     const id = uid();
-    setGreetingIndex(Math.floor(Math.random() * GREETING_TEMPLATES.en.length));
+    const greetings = GREETING_TEMPLATES[settings.language] || GREETING_TEMPLATES.en;
+    setGreetingIndex(Math.floor(Math.random() * greetings.length));
     setChats((p) => [{ id, title: "New Chat", messages: [], createdAt: Date.now() }, ...p]);
     setActiveChatId(id);
     setInput("");
     setPendingAttachments([]);
     setAttachError("");
-  }, []);
+  }, [settings.language]);
 
   const deleteChat = useCallback(async (id, e) => {
     e.stopPropagation();
@@ -2243,9 +2247,9 @@ const handleKey = (e) => {
 };
 
   // ── Theme tokens (Silver light mode & Dark Gray dark mode) ──
-  const bg = isDark ? "bg-[#0b0c0e]" : "bg-[#e4e7eb]";
-  const sidebarBg = isDark ? "bg-[#141518]" : "bg-[#d8dce2]";
-  const sideBorder = isDark ? "border-[#22242a]" : "border-[#cbd5e1]";
+  const bg = isDark ? "bg-[#000000]" : "bg-[#e4e7eb]";
+  const sidebarBg = isDark ? "bg-[#0c0d10]" : "bg-[#d8dce2]";
+  const sideBorder = isDark ? "border-[#1c1e24]" : "border-[#cbd5e1]";
   const txt = isDark ? "text-[#f1f5f9]" : "text-[#0f172a]";
   const muted = isDark ? "text-[#71717a]" : "text-[#64748b]";
   const hov = isDark ? "hover:bg-white/5" : "hover:bg-black/5";
@@ -2263,20 +2267,6 @@ const handleKey = (e) => {
           ? `max(env(safe-area-inset-top, 0px), ${ANDROID_STATUS_BAR_FALLBACK})`
           : "env(safe-area-inset-top, 0px)",
       }}>
-
-      {/* Android system status-bar icon color is inconsistent across
-          devices/OS builds — sometimes light, sometimes dark — and we can't
-          reliably detect or control it from the webview. Instead of trying
-          to match it, we paint a fixed neutral gray strip behind the inset
-          area that gives both light and dark icons reasonable contrast,
-          regardless of theme. */}
-      {isAndroidPlatform && (
-        <div
-          aria-hidden="true"
-          className="fixed top-0 left-0 right-0 z-[60] pointer-events-none bg-[#71717a]"
-          style={{ height: `max(env(safe-area-inset-top, 0px), ${ANDROID_STATUS_BAR_FALLBACK})` }}
-        />
-      )}
 
       {/* KaTeX display equations don't wrap and can render wider than the
           message column (long expressions, matrices, etc). Without this,
